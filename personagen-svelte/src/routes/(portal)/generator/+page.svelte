@@ -1619,7 +1619,7 @@
 		transition: all 0.3s ease;
 	}
 	.step-item.active .step-circle {
-		background: var(--gradient-subtle);
+		background: var(--gradient-cta);
 		border-color: var(--accent);
 		color: #fff;
 		box-shadow: var(--shadow-accent);

@@ -4,6 +4,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import { plural } from '$lib/plural';
+	import { instantShort } from '$lib/datetime';
 
 	let { data } = $props();
 
@@ -125,8 +126,8 @@
 		}
 	}
 
-	const when = (iso: string) =>
-		new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+	// In the viewer's locale AND zone on the server too (see instantShort).
+	const when = (iso: string) => instantShort(iso);
 
 	const kindLabel: Record<string, string> = {
 		grant: 'Credit added',
@@ -267,6 +268,16 @@
 						>
 					{/if}
 				</p>
+				{#if data.topupLoaded?.length}
+					<ul class="topup-pending topup-loaded" aria-label="Top-ups we loaded for you">
+						{#each data.topupLoaded as r (r.id)}
+							<li>
+								<strong>{r.title.replace(/^Top-up request · /, '')}</strong> loaded {when(r.updated_at)}
+								— it is in the balance above.
+							</li>
+						{/each}
+					</ul>
+				{/if}
 				{#if data.topupRequests?.length}
 					<ul class="topup-pending" aria-label="Your open top-up requests">
 						{#each data.topupRequests as r (r.id)}

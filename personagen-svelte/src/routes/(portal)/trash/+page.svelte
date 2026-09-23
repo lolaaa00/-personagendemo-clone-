@@ -376,14 +376,15 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		/* Trashed content reads as inactive until you hover or select it. */
-		opacity: 0.72;
-		transition: opacity 0.15s;
+		/* Trashed content reads as inactive until you hover or select it — by
+		   desaturating, not fading: opacity took the labels below AA (re-audit). */
+		filter: saturate(0.35);
+		transition: filter 0.15s;
 	}
 
 	.trash-cell:hover,
 	.trash-cell:focus-within {
-		opacity: 1;
+		filter: none;
 	}
 
 	.trash-cell-ident {

@@ -5,11 +5,12 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { getAgentRole } from '$lib/server/workspaces';
 import { capabilities } from '$lib/seat';
+import { fetchStudioPlan } from '$lib/studio-pricing';
 
 /** A persona id is a uuid. Anything else cannot name one. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, fetch }) => {
 	// A malformed id used to reach Postgres, which rejected the uuid cast with
 	// 22P02 — not PGRST116 — so the guard below treated a typo as a database
 	// failure and returned 500 "Failed to load personas". A mistyped URL is not
@@ -125,7 +126,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			// Overrides the layout seat for this page. Never-brick: an unresolved role
 			// (RPC hiccup) keeps yesterday's behaviour rather than hiding an owner's
 			// own controls.
-			seat: capabilities(role ?? 'owner')
+			seat: capabilities(role ?? 'owner'),
+			// STREAMED, not awaited: the page renders at once and the plan follows
+			// in the same response. Fetched from the browser after hydration, every
+			// Studio tile and the rate card sat on "…" or a static table for
+			// seconds (re-audit). A seat that cannot generate gets no plan.
+			studioPlan: capabilities(role ?? 'owner').canCreate ? fetchStudioPlan(agent.id, fetch) : null
 		};
 	}
 

@@ -11,7 +11,18 @@ import { getSettings } from '$lib/server/settings';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
 import { walletToDisplay, type WorkspaceWallet } from '$lib/server/wallet-display';
 
-export const load: LayoutServerLoad = async ({ locals, request, url, depends }) => {
+/** The `tz` cookie, only if it names a zone this runtime knows. */
+function viewerTimeZone(raw: string | undefined): string | undefined {
+	if (!raw || raw.length > 64 || !/^[A-Za-z_+\-/0-9]+$/.test(raw)) return undefined;
+	try {
+		new Intl.DateTimeFormat('en-US', { timeZone: raw });
+		return raw;
+	} catch {
+		return undefined;
+	}
+}
+
+export const load: LayoutServerLoad = async ({ locals, request, url, depends, cookies }) => {
 	// The sidebar balance is loaded here and nowhere else, so without a dependency
 	// to invalidate it only changed on navigation: a bulk generation could debit
 	// the wallet and the pill would sit on the old number until you clicked
@@ -180,6 +191,7 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 			}),
 			fx: pricingSettings.fx_rates ?? null,
 			locale: localeFromAcceptLanguage(pricingAcceptLanguage),
+			timeZone: viewerTimeZone(cookies.get('tz')),
 			/** Credits are being written (shadow or enforce) — a quote is a real charge. */
 			metered: mode !== 'off',
 			enforced: mode === 'enforce'
@@ -237,12 +249,15 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 				formatted: formatCredits(balance, currency, s.fx_rates, locale, { whole: false }),
 				compact: (() => {
 					try {
+						// Never a one-decimal money amount ("£88.7" beside "£88.69").
+						const amt = creditsToAmount(balance, currency, s.fx_rates);
 						return new Intl.NumberFormat(locale, {
 							style: 'currency',
 							currency,
-							notation: 'compact',
-							maximumFractionDigits: 1
-						}).format(creditsToAmount(balance, currency, s.fx_rates));
+							...(Math.abs(amt) >= 1000
+								? { notation: 'compact', maximumFractionDigits: 1 }
+								: { maximumFractionDigits: 0 })
+						}).format(amt);
 					} catch {
 						return formatCredits(balance, currency, s.fx_rates, locale);
 					}

@@ -512,7 +512,7 @@
 			when: 'You want control over what a generation costs and what gets sent to the AI.',
 			facts: [
 				'Opens before every generation',
-				'Shows the exact prompt and the exact cost',
+				'Shows the exact prompt and the price you will be charged',
 				'Cancel costs nothing',
 				'Platforms + schedule are set right here',
 			],
@@ -522,9 +522,10 @@
 					img: 'composer',
 					alt: 'The generation composer'
 				},
+				{ t: 'Pick a format. Each one shows its price; one you cannot use says why on the tile — for example “Cinematic — needs a product photo” until a product in your Brand Brief has one.' },
 				{ t: '"Prompt sent to the model" shows the exact text the AI receives — edit it if you want something specific.' },
 				{
-					t: '"Pipeline that will run" lists each step with its model and estimated dollar cost, plus a live total.',
+					t: '"Pipeline that will run" lists each step with its model and its price in your currency — what the wallet is charged for that step, rounded per step exactly as it is debited — plus the total and whose wallet pays it.',
 					img: 'composer-costs',
 					alt: 'The composer scrolled to the Pipeline that will run cost breakdown'
 				},
@@ -1441,7 +1442,7 @@
 								stroke-linejoin="round"
 								aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
 							{cat}
-							<span class="nav-count">{inCat.length}</span>
+							<span class="nav-count">{inCat.length}<span class="sr-only"> {inCat.length === 1 ? 'guide' : 'guides'}</span></span>
 						</button>
 						{#if catOpen(cat)}
 							<div class="nav-cat-items">
@@ -2046,7 +2047,8 @@
 	.nav-count {
 		margin-left: auto;
 		font-variant-numeric: tabular-nums;
-		opacity: 0.7;
+		/* A dimmed colour, not opacity: 0.7 took the count below AA. */
+		color: var(--text-dim);
 	}
 	.nav-cat-items {
 		display: flex;

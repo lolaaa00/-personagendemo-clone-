@@ -139,15 +139,18 @@
 
 <div class="analytics-panel">
 	<div class="panel-header">
-		<h4>Performance Analytics</h4>
+		<h2>Performance Analytics</h2>
 		{#if agents.length > 0}
-			<div class="agent-tabs" role="tablist" aria-label="Select persona">
+			<!-- Picking a persona re-renders the SAME view for it — a pressed-button
+			     group, not tabs (a tablist with no panels, ids or arrow keys was a
+			     half-built widget; re-audit). -->
+			<div class="agent-tabs" role="group" aria-label="Select persona">
 				{#each agents as agent (agent.id)}
 					<button
+						type="button"
 						class="agent-tab"
 						class:active={effectiveId === agent.id}
-						role="tab"
-						aria-selected={effectiveId === agent.id}
+						aria-pressed={effectiveId === agent.id}
 						onclick={() => (selectedId = agent.id)}
 					>
 						{agent.name}
@@ -235,7 +238,7 @@
 
 		<div class="panel-grid">
 			<div class="panel-chart">
-				<h5>Views & Likes Over Time</h5>
+				<h3>Views & Likes Over Time</h3>
 				{#if chartSeries.length > 0}
 					<AnalyticsChart series={chartSeries} />
 				{:else}
@@ -247,7 +250,7 @@
 			</div>
 
 			<div class="panel-platforms">
-				<h5>By Platform</h5>
+				<h3>By Platform</h3>
 				{#if platformRows.length > 0}
 					<div class="platform-rows">
 						{#each platformRows as row (row.name)}
@@ -298,7 +301,7 @@
 		margin-bottom: 1.25rem;
 	}
 
-	.panel-header h4 {
+	.panel-header h2 {
 		font-size: 0.8rem;
 		font-weight: 700;
 		color: var(--text-muted);
@@ -310,7 +313,7 @@
 		margin: 0;
 	}
 
-	.panel-header h4::before {
+	.panel-header h2::before {
 		content: '';
 		display: inline-block;
 		width: 3px;
@@ -405,8 +408,8 @@
 		gap: 1.5rem;
 	}
 
-	.panel-chart h5,
-	.panel-platforms h5 {
+	.panel-chart h3,
+	.panel-platforms h3 {
 		font-size: 0.72rem;
 		font-weight: 700;
 		color: var(--text-dim);

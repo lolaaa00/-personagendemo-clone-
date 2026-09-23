@@ -10,6 +10,27 @@
 	let { data } = $props();
 
 	let tab = $state<'keys' | 'reference' | 'console'>('keys');
+
+	// A complete WAI-ARIA tabs pattern: the three buttons swap three different
+	// panels, so they are real tabs — roving tabindex, arrows/Home/End move focus
+	// AND selection (automatic activation), and one tabpanel labelled by its tab.
+	const TABS = [
+		{ key: 'keys', label: 'API Keys' },
+		{ key: 'reference', label: 'Endpoints' },
+		{ key: 'console', label: 'Test Console' }
+	] as const;
+	function onTabKeydown(e: KeyboardEvent) {
+		const i = TABS.findIndex((t) => t.key === tab);
+		let next = i;
+		if (e.key === 'ArrowRight') next = (i + 1) % TABS.length;
+		else if (e.key === 'ArrowLeft') next = (i - 1 + TABS.length) % TABS.length;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = TABS.length - 1;
+		else return;
+		e.preventDefault();
+		tab = TABS[next].key;
+		document.getElementById(`dev-tab-${tab}`)?.focus();
+	}
 	let keys = $derived((data as any).keys ?? []);
 
 	// ── Plan gate ─────────────────────────────────────────────────────────────
@@ -335,12 +356,24 @@
 >
 	<div class="dev-page">
 
-	<div class="dev-tabs" role="tablist">
-		<button role="tab" class="dev-tab" class:active={tab === 'keys'} onclick={() => (tab = 'keys')}>API Keys</button>
-		<button role="tab" class="dev-tab" class:active={tab === 'reference'} onclick={() => (tab = 'reference')}>Endpoints</button>
-		<button role="tab" class="dev-tab" class:active={tab === 'console'} onclick={() => (tab = 'console')}>Test Console</button>
+	<div class="dev-tabs" role="tablist" aria-label="Developer API sections">
+		{#each TABS as t (t.key)}
+			<button
+				type="button"
+				role="tab"
+				id="dev-tab-{t.key}"
+				class="dev-tab"
+				class:active={tab === t.key}
+				aria-selected={tab === t.key}
+				aria-controls="dev-tabpanel"
+				tabindex={tab === t.key ? 0 : -1}
+				onclick={() => (tab = t.key)}
+				onkeydown={onTabKeydown}>{t.label}</button
+			>
+		{/each}
 	</div>
 
+	<div class="dev-tabpanel" id="dev-tabpanel" role="tabpanel" aria-labelledby="dev-tab-{tab}" tabindex="0">
 	{#if tab === 'keys'}
 		<section class="dev-card">
 			<h2>API keys</h2>
@@ -365,6 +398,7 @@
 			<div class="key-create">
 				<input
 					type="text"
+					aria-label="Key label"
 					placeholder="Label (e.g. Monarch controller)"
 					bind:value={newLabel}
 					maxlength="120"
@@ -445,10 +479,10 @@
 			</label>
 
 			<div class="console-row">
-				<select bind:value={cMethod} class="console-method">
+				<select bind:value={cMethod} class="console-method" aria-label="HTTP method">
 					<option>GET</option><option>POST</option><option>PATCH</option><option>DELETE</option>
 				</select>
-				<input class="console-path" bind:value={cPath} spellcheck="false" />
+				<input class="console-path" bind:value={cPath} spellcheck="false" aria-label="Request path" />
 				<button class="dev-btn primary" onclick={runConsole} disabled={running}>
 					{running ? 'Sending…' : 'Send'}
 				</button>
@@ -470,10 +504,18 @@
 		</section>
 	{/if}
 	</div>
+	</div>
 </PageShell>
 
 <style>
 	.dev-page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-5);
+	}
+	/* The tabpanel wraps what used to be direct .dev-page children, so it
+	   carries the same column + gap (the Endpoints panel has several cards). */
+	.dev-tabpanel {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-5);

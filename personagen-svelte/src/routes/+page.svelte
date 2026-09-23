@@ -275,16 +275,16 @@
 			{ item: 'Talking head', note: 'scripted, voiced, lip-synced', price: data.receipt.talkingHead, credits: data.receipt.credits.talkingHead }
 		].sort((a, b) => a.credits - b.credits)
 	);
-	let videoRange = $derived(
-		data.receipt.credits.videoPost <= data.receipt.credits.talkingHead
-			? `${data.receipt.video}–${data.receipt.talkingHead}`
-			: `${data.receipt.talkingHead}–${data.receipt.video}`
+	// A FLOOR, not a closed range: longer clips and cinematic runs cost more
+	// than either receipt row, so a closed two-price range understated the top (re-audit).
+	let videoFrom = $derived(
+		data.receipt.credits.videoPost <= data.receipt.credits.talkingHead ? data.receipt.video : data.receipt.talkingHead
 	);
 
 	let FAQS = $derived([
 		{
 			q: 'How does the media wallet work?',
-			a: `Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about ${data.receipt.text} — so a persona posting six times a day spends around ${data.receipt.sixText}, against ${videoRange} for a video. Every generation shows its price before you confirm. Run low and you top up at par — a dollar buys a dollar of generation, bigger packs add a bonus — and it never expires.`
+			a: `Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about ${data.receipt.text} — so a persona posting six times a day spends around ${data.receipt.sixText}, while a video starts at ${videoFrom}. Every generation shows its price before you confirm. Run low and you top up at par — a dollar buys a dollar of generation, bigger packs add a bonus — and it never expires.`
 		},
 		{
 			q: 'How does the identity actually stay consistent?',

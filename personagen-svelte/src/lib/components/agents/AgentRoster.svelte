@@ -987,6 +987,10 @@
 	.toggle {
 		position: relative;
 		display: inline-flex;
+		/* Never squeezed by the label beside it: at 320px the stacked card measured
+		   this switch 0px wide (re-audit). */
+		flex-shrink: 0;
+		min-width: 36px;
 		align-items: center;
 		cursor: pointer;
 		width: 36px;
@@ -1174,7 +1178,8 @@
 
 		.cell-label {
 			display: inline;
-			min-width: 6.5rem;
+			min-width: min(6.5rem, 40%);
+			flex-shrink: 1;
 			color: var(--text-dim);
 			font-weight: 600;
 		}

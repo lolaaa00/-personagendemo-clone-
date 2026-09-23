@@ -287,7 +287,23 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	const db = createDbService(locals.supabase);
 	// Every engine text call is metered through one wrapper: gated once per
 	// request, recorded + debited per call (D11). Nothing below changes.
-	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), { supabase: locals.supabase, userId: session.user.id, stage: `engine:${String(action ?? 'unknown')}` });
+	// The persona a call is FOR decides who pays (persona → workspace → owner),
+	// exactly as generate-post does. Without it a workspace member's profile or
+	// batch run debited the member's own wallet, not the workspace's (re-audit).
+	// Only a persona this caller can read (RLS) is ever named — never a
+	// client-supplied id taken on trust.
+	const claimedAgentId =
+		typeof (body.agentId ?? body.agent_id) === 'string' ? String(body.agentId ?? body.agent_id) : '';
+	let meterAgentId: string | undefined;
+	if (/^[0-9a-f-]{36}$/i.test(claimedAgentId)) {
+		const { data: visible } = await locals.supabase
+			.from('agents')
+			.select('id')
+			.eq('id', claimedAgentId)
+			.maybeSingle();
+		meterAgentId = visible?.id ?? undefined;
+	}
+	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), { supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId, stage: `engine:${String(action ?? 'unknown')}` });
 	const hasAi = !!ai;
 
 	console.log(
@@ -520,7 +536,7 @@ Platform: ${bp.platform || platform}
 				// Gate the WHOLE batch up front at retail (text + still per copy), so a
 				// thin wallet is refused before the first paid call instead of after copy 7.
 				try {
-					await assertWithinBudget(locals.supabase, session.user.id, undefined, creditsFor(count * (meteringPriceOf('openrouter', 'llm') + meteringPriceOf('fal', 'image', 'nano'))));
+					await assertWithinBudget(locals.supabase, session.user.id, meterAgentId, creditsFor(count * (meteringPriceOf('openrouter', 'llm') + meteringPriceOf('fal', 'image', 'nano'))));
 				} catch (gateErr) {
 					const refusal = meteringRefusal(gateErr);
 					return json(refusal.body, { status: refusal.status });
@@ -592,7 +608,7 @@ Output ONLY the JSON.`;
 								if (!parsed || !parsed.text || !parsed.ugc_broll_prompt) return null;
 								// Generate a unique UGC image for this copy — no product-photo fallback
 								const gen = await meteredCall(
-									{ supabase: locals.supabase, userId: session.user.id },
+									{ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId },
 									// Positional defaults kept explicit so the registry-resolved t2i route
 									// lands in the trailing slot without changing model/aspect/people.
 									() => generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey, undefined, '3:4', true, orRoutes.t2i),
@@ -1294,7 +1310,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							for (let attempt = 0; attempt < 2 && !contentToParse; attempt++) {
 								if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
 								try {
-									const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
+									const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
 										method: 'POST',
 										headers: {
 											'Content-Type': 'application/json',
@@ -1583,7 +1599,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											// Firecrawl first, when configured…
 											if (firecrawlKey && !firecrawlKey.includes('placeholder')) {
 												try {
-													const r = await meteredCall({ supabase: locals.supabase, userId: session.user.id }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
+													const r = await meteredCall({ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
 														method: 'POST',
 														headers: {
 															'Content-Type': 'application/json',
@@ -1845,7 +1861,7 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 					const imageCandidates: string[] = [];
 
 					if (fcKey && !fcKey.includes('placeholder') && fcKey.trim() !== '') {
-						const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
+						const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
 							method: 'POST',
 							headers: {
 								'Content-Type': 'application/json',

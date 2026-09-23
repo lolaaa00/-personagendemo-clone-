@@ -80,6 +80,10 @@
 
 	// Content Forge Integration inside Composer — real DB blueprints only.
 
+	/** The distinct zones the calendar's slots are written in. */
+	let calendarZones = $derived([
+		...new Set((Object.values(data?.autopilotConfigs ?? {}) as AutopilotView[]).map((c) => c.timezone).filter(Boolean))
+	] as string[]);
 	let dbBlueprints = $derived(data.blueprints || []);
 	let selectedBlueprintId = $state<string | null>('');
 
@@ -1180,6 +1184,14 @@
 		</p>
 	{/if}
 
+	<!-- A slot is a wall-clock time in its persona's own zone, not the
+	     viewer's. Say which, or "10:00" is ambiguous across zones (re-audit). -->
+	{#if calendarZones.length === 1}
+		<p class="cal-zone-note">Times are in {calendarZones[0].replace(/_/g, ' ')} — the persona's own time zone.</p>
+	{:else if calendarZones.length > 1}
+		<p class="cal-zone-note">Times are in each persona's own time zone ({calendarZones.map((z) => z.replace(/_/g, ' ')).join(', ')}).</p>
+	{/if}
+
 	<!-- Shared calendar: views, rail, analytics strip, day modal. The page
 	     keeps ownership of every mutation (drawer, approve, generate). -->
 	<CalendarView
@@ -2264,5 +2276,10 @@
 		.manage-list {
 			max-height: none;
 		}
+	}
+	.cal-zone-note {
+		margin: 0 0 var(--space-2);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 </style>

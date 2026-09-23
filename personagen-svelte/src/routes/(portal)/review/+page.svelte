@@ -1849,6 +1849,10 @@
 		background: none;
 		padding: 0;
 		font: inherit;
+		/* A button does not wrap its label by default; this one is a sentence. */
+		white-space: normal;
+		text-align: left;
+		overflow-wrap: anywhere;
 		color: var(--accent-text);
 		cursor: pointer;
 		text-decoration: underline;
@@ -2620,6 +2624,18 @@
 		.filt-count {
 			margin-left: 0;
 			white-space: normal;
+		}
+	}
+	/* Its children may shrink below their content: the filter strip scrolls
+	   inside itself, so its nowrap min-content (≈560px) must never set the
+	   toolbar's width — it did, and the page scrolled sideways at 320–414. */
+	.queue-toolbar > * {
+		min-width: 0;
+		max-width: 100%;
+	}
+	@media (max-width: 767px) {
+		.queue-toolbar > .filter-row {
+			flex: 1 1 100%;
 		}
 	}
 	.queue-toolbar {

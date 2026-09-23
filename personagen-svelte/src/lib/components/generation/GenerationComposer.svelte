@@ -170,6 +170,17 @@
 	// this run composites so switching format client-side never finds an empty
 	// picker; whether an id is SENT is gated on the composition below.
 	let products = $state<Array<{ id: string; name: string; photoUrl: string | null }>>([]);
+	/**
+	 * Cinematic is refused server-side without a product photo in the brief. The
+	 * composer knows the brief's products once its preview answers, so it gates
+	 * the tile itself — the calendar never passed that reason in (re-audit).
+	 */
+	let cinematicReason = $derived(
+		cinematicBlocked ??
+			(preview && !products.some((x) => x.photoUrl)
+				? 'Cinematic needs a product photo — add one to a product in your Brand Brief first.'
+				: null)
+	);
 	let characterRefUrl = $state('');
 	let scheduledDate = $state('');
 	let scheduledTime = $state('');
@@ -1227,7 +1238,7 @@
 											items: listCount
 										})
 									).map((st) => st.usd)}
-									{@const planLocked = f.id === 'cinematic' && cinematicBlocked !== null}
+									{@const planLocked = f.id === 'cinematic' && cinematicReason !== null}
 									<button
 										type="button"
 										class="fmt"
@@ -1235,12 +1246,16 @@
 										role="radio"
 										aria-checked={formatId === f.id}
 										disabled={planLocked}
-										title={planLocked ? (cinematicBlocked ?? undefined) : undefined}
+										title={planLocked ? (cinematicReason ?? undefined) : undefined}
 										onclick={() => pickFormat(f.id)}
 									>
 										<span class="fmt-top">
 											<span class="fmt-name"
-												>{f.label}{planLocked ? ' — not in your plan' : ''}</span
+												>{f.label}{planLocked
+													? cinematicReason?.includes('product photo')
+														? ' — needs a product photo'
+														: ' — not in your plan'
+													: ''}</span
 											>
 											<span class="fmt-cost">{f.steps.length ? quoteSteps(costSteps) : 'varies'}</span>
 										</span>
@@ -2245,6 +2260,7 @@
 	}
 	.fmt {
 		display: flex;
+		min-width: 0;
 		flex-direction: column;
 		gap: 0.15rem;
 		padding: 0.6rem 0.75rem;
@@ -2272,6 +2288,9 @@
 	.fmt-name {
 		font-weight: 600;
 		font-size: 0.88rem;
+		/* \"Cinematic — needs a product photo\" wraps at 320 instead of clipping. */
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.fmt-cost {
 		font-size: 0.78rem;

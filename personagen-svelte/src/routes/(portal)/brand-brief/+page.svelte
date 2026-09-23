@@ -193,6 +193,21 @@
 	let activeTab = $state<TabKey>(readParam('tab', TABS.map((t) => t.key) as TabKey[], 'overview'));
 	$effect(() => syncParam('tab', activeTab, 'overview'));
 
+	// WAI-ARIA tabs keyboard model: one tab in the Tab order (roving tabindex),
+	// arrows / Home / End move focus and selection together.
+	function onTabKeydown(e: KeyboardEvent) {
+		const i = TABS.findIndex((t) => t.key === activeTab);
+		let next = i;
+		if (e.key === 'ArrowRight') next = (i + 1) % TABS.length;
+		else if (e.key === 'ArrowLeft') next = (i - 1 + TABS.length) % TABS.length;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = TABS.length - 1;
+		else return;
+		e.preventDefault();
+		activeTab = TABS[next].key;
+		document.getElementById(`brand-brief-tab-${activeTab}`)?.focus();
+	}
+
 	// Auto-select tab from query param
 	$effect(() => {
 		const tabParam = $page.url.searchParams.get('tab') as TabKey;
@@ -924,13 +939,16 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		<div class="tabs" role="tablist" aria-label="Brand brief sections">
 			{#each TABS as tab}
 				<button
+					type="button"
 					class="tab-btn"
 					class:active={activeTab === tab.key}
 					onclick={() => (activeTab = tab.key)}
+					onkeydown={onTabKeydown}
 					role="tab"
 					id="brand-brief-tab-{tab.key}"
 					aria-selected={activeTab === tab.key}
 					aria-controls="brand-brief-tabpanel"
+					tabindex={activeTab === tab.key ? 0 : -1}
 					aria-label={tab.label}
 				>
 					<svg
@@ -988,7 +1006,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		class="tab-body"
 		id="brand-brief-tabpanel"
 		role="tabpanel"
-		tabindex="-1"
+		tabindex="0"
 		aria-labelledby="brand-brief-tab-{activeTab}"
 	>
 		{#if activeTab === 'overview'}
@@ -2976,7 +2994,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: var(--text);
 	}
 	.action-btn.primary {
-		background: var(--gradient-subtle);
+		background: var(--gradient-cta);
 		border-color: transparent;
 		color: #fff;
 	}

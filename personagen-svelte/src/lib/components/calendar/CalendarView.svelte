@@ -520,7 +520,7 @@
 			{#if showDatePicker}
 				<div class="datepicker-backdrop" onclick={() => (showDatePicker = false)} role="presentation"></div>
 				<div class="datepicker-dropdown">
-					<h4 class="datepicker-title">Jump to Date</h4>
+					<h2 class="datepicker-title">Jump to Date</h2>
 					<div class="datepicker-fields">
 						<div class="datepicker-field">
 							<label for="cal-picker-month">Month</label>
@@ -624,7 +624,7 @@
 	{#if showRail}
 		<!-- Personas rail: in-page sub-nav (never covers the app's global nav) -->
 		<aside class="personas-rail" aria-label="Filter by persona">
-			<h3 class="rail-title">Personas</h3>
+			<h2 class="rail-title">Personas</h2>
 			<div class="rail-list">
 				<button class="agent-item" class:active={!selectedAgentId} aria-pressed={!selectedAgentId} onclick={() => (selectedAgentId = '')}>
 					<span class="agent-dot" aria-hidden="true"></span>
@@ -741,7 +741,7 @@
 
 			<!-- Mobile fallback: tappable list (month grid is unusable at phone width) -->
 			<div class="mobile-list">
-				<h3 class="mobile-list-title">Upcoming Posts</h3>
+				<h2 class="mobile-list-title">Upcoming Posts</h2>
 				{#each [...filteredPosts].sort((a, b) => a.date.localeCompare(b.date)) as post}
 					{@const thumb = getPostThumb(post)}
 					<button class="mobile-post-item" onclick={() => onOpenPost(post)}>
@@ -762,7 +762,7 @@
 								<span class="mobile-post-agent">{post.agentName}</span>
 								<div class="mobile-post-platforms">
 									{#each post.platforms as p}
-										<span class="platform-tag" style="color: {platformColor(p)}">{p}</span>
+										<span class="platform-tag" class:ink={platformColor(p) === '#000000'} style="color: {platformColor(p)}">{p}</span>
 									{/each}
 								</div>
 							</div>
@@ -870,7 +870,7 @@
 								<div class="day-post-foot">
 									<div class="day-post-platforms">
 										{#each post.platforms as p}
-											<span class="platform-tag" style="color: {platformColor(p)}">{p}</span>
+											<span class="platform-tag" class:ink={platformColor(p) === '#000000'} style="color: {platformColor(p)}">{p}</span>
 										{/each}
 									</div>
 									{#if a && (a.views || a.likes || a.comments)}
@@ -926,13 +926,13 @@
 			use:dialog={{ onClose: () => (selectedDay = null) }}
 		>
 			<div class="modal-header">
-				<h3 id="cal-day-modal-title">
+				<h2 id="cal-day-modal-title">
 					{localDate(new Date(currentYear, currentMonth, selectedDay ?? 1), {
 						month: 'long',
 						day: 'numeric',
 						year: 'numeric'
 					})}
-				</h3>
+				</h2>
 				<button class="modal-close" onclick={() => (selectedDay = null)} aria-label="Close modal">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
 				</button>
@@ -1488,8 +1488,9 @@
 	/* Hover-revealed one-click generate for a specific day */
 	.cell-add {
 		position: relative;
-		width: 22px;
-		height: 22px;
+		/* 24px: the WCAG 2.5.8 minimum target, even before the 44px overlay. */
+		width: 24px;
+		height: 24px;
 		flex: none;
 		border-radius: var(--radius-full);
 		border: 1px solid var(--border);
@@ -1771,8 +1772,8 @@
 		position: relative;
 		flex-shrink: 0;
 		align-self: center;
-		width: 22px;
-		height: 22px;
+		width: 24px;
+		height: 24px;
 		margin-right: 0.3rem;
 		border-radius: var(--radius-full);
 		border: 1px solid var(--success);
@@ -2059,7 +2060,7 @@
 		background: var(--surface-2);
 	}
 
-	.modal-header h3 {
+	.modal-header h2 {
 		font-size: var(--text-md);
 		font-family: var(--font-display);
 		font-weight: 600;
@@ -2457,5 +2458,10 @@
 			gap: 0.5rem;
 			padding: 0.5rem;
 		}
+	}
+	/* X and Threads brand black is invisible on the dark theme (re-audit): an
+	   ink-coloured brand takes the text colour, which is legible in both. */
+	.platform-tag.ink {
+		color: var(--text) !important;
 	}
 </style>

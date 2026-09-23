@@ -9,7 +9,7 @@
 </script>
 
 <div class="dash-chart-card">
-	<h4>Platform Distribution</h4>
+	<h2>Platform Distribution</h2>
 	{#if platforms.length === 0}
 		<div class="plat-empty">
 			<p>No platform data yet</p>
@@ -49,7 +49,7 @@
 		overflow: hidden;
 	}
 
-	.dash-chart-card h4 {
+	.dash-chart-card h2 {
 		font-size: 0.8rem;
 		font-weight: 700;
 		margin-bottom: 1.25rem;
@@ -61,7 +61,7 @@
 		gap: 8px;
 	}
 
-	.dash-chart-card h4::before {
+	.dash-chart-card h2::before {
 		content: '';
 		display: inline-block;
 		width: 3px;

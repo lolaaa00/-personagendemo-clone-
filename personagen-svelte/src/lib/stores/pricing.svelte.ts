@@ -35,6 +35,7 @@ export function resetPricing(): void {
 	ctx.currency = 'USD';
 	ctx.fx = null;
 	ctx.locale = undefined;
+	ctx.timeZone = undefined;
 	ctx.metered = undefined;
 	ctx.enforced = undefined;
 }
@@ -48,6 +49,7 @@ export function primePricing(next: Partial<PricingContext> | null | undefined): 
 	if (typeof next.currency === 'string' && next.currency) ctx.currency = next.currency;
 	if (next.fx !== undefined) ctx.fx = (next.fx as FxRates | null) ?? null;
 	if (next.locale !== undefined) ctx.locale = next.locale;
+	if (next.timeZone !== undefined) ctx.timeZone = next.timeZone;
 	if (next.metered !== undefined) ctx.metered = next.metered;
 	if (next.enforced !== undefined) ctx.enforced = next.enforced;
 }

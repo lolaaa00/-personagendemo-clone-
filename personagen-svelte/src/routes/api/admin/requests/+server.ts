@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { logActivity } from '$lib/server/activity';
+import { CREDIT_PACKS } from '$lib/billing-packs';
 import {
 	PROBLEM_REPORT_TITLE_PREFIX,
 	SIGNIN_HELP_TITLE_PREFIX,
@@ -9,12 +11,21 @@ import {
 } from '$lib/server/topup-requests';
 
 /**
- * Close a customer request — a top-up the operator has loaded, or a problem
- * report they have dealt with. Without it a fulfilled request sat in the
- * Admin list forever, and in the customer's "pending" list on Billing (round-2
- * re-audit: "no close path"). Platform admin only; only these two kinds of
- * ticket, by their title prefix, can be closed here.
+ * Close a customer request — platform admin only.
+ *
+ * A TOP-UP is not closed, it is FULFILLED: the pack named in the request is
+ * granted to the requester's wallet, and only then is the ticket closed. The
+ * first version closed it and loaded nothing — the balance stayed put and the
+ * pending line just vanished (round-3 re-audit). The grant runs through
+ * credit_apply() keyed on the ticket, so a double click or a retry can never
+ * load it twice.
+ *
+ * Problem reports and sign-in help requests are simply marked handled. Only
+ * these three kinds of ticket, by title prefix, can be touched here (checked
+ * in code: a PostgREST `or()` cannot carry the spaced prefixes).
  */
+const usdOf = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const gate = await requirePlatformAdmin(locals);
 	if (!gate.ok) return json({ success: false, error: gate.message }, { status: gate.status });
@@ -25,18 +36,60 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!ticketId) return json({ success: false, error: 'Which request?' }, { status: 400 });
 
 	const svc = getServiceSupabase();
-	// Checked in code, not in a PostgREST `or()` filter: the prefixes contain
-	// spaces, which that filter syntax cannot carry unquoted (it failed with
-	// "column tickets.title does not exist" in pre-flight).
-	const { data: ticket } = await svc.from('tickets').select('id, title').eq('id', ticketId).maybeSingle();
+	const { data: ticket } = await svc
+		.from('tickets')
+		.select('id, title, user_id')
+		.eq('id', ticketId)
+		.maybeSingle();
 	const title = String(ticket?.title ?? '');
-	if (!ticket || ![TOPUP_TITLE_PREFIX, PROBLEM_REPORT_TITLE_PREFIX, SIGNIN_HELP_TITLE_PREFIX].some((x) => title.startsWith(x))) {
+	const kinds = [TOPUP_TITLE_PREFIX, PROBLEM_REPORT_TITLE_PREFIX, SIGNIN_HELP_TITLE_PREFIX];
+	if (!ticket || !kinds.some((x) => title.startsWith(x))) {
 		return json({ success: false, error: 'No such open request.' }, { status: 404 });
 	}
+
+	let loaded: { credits: number; label: string } | null = null;
+	if (title.startsWith(TOPUP_TITLE_PREFIX)) {
+		const pack = CREDIT_PACKS.find(
+			(p) => title === `${TOPUP_TITLE_PREFIX} · ${p.label} ${usdOf(p.usdCents)}`
+		);
+		if (!pack) {
+			return json(
+				{ success: false, error: 'This request names no known pack — grant it from Users & Credits instead.' },
+				{ status: 409 }
+			);
+		}
+		const { error: grantErr } = await svc.rpc('credit_apply', {
+			p_user: ticket.user_id,
+			p_delta: pack.credits,
+			p_kind: 'grant',
+			p_note: `Top-up request loaded: ${pack.label} ${usdOf(pack.usdCents)}`,
+			p_actor: gate.user.id,
+			p_stripe_event: `topup-request:${ticket.id}`,
+			p_allow_negative: false
+		});
+		const duplicate =
+			!!grantErr && /duplicate key|23505|unique constraint/i.test(`${grantErr.message} ${grantErr.code ?? ''}`);
+		if (grantErr && !duplicate) {
+			console.error('[admin/requests] top-up grant failed:', grantErr.message);
+			return json(
+				{ success: false, error: 'The credit could not be loaded. Nothing changed — try again.' },
+				{ status: 500 }
+			);
+		}
+		loaded = { credits: pack.credits, label: `${pack.label} ${usdOf(pack.usdCents)}` };
+		logActivity(locals, gate.user.id, {
+			action: 'admin.credits.granted',
+			actorKind: 'admin',
+			targetUserId: ticket.user_id,
+			creditsDelta: duplicate ? 0 : pack.credits,
+			meta: { note: `top-up request ${ticket.id}`, duplicate }
+		});
+	}
+
 	const { error } = await svc.from('tickets').update({ status: 'done' }).eq('id', ticketId);
 	if (error) {
 		console.error('[admin/requests] close failed:', error.message);
 		return json({ success: false, error: 'Could not close it. Try again.' }, { status: 500 });
 	}
-	return json({ success: true });
+	return json({ success: true, loaded });
 };

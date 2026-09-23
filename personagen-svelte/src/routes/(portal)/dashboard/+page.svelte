@@ -114,7 +114,7 @@
 <PageShell
 	title="Dashboard"
 	width="wide"
-	description="Status, engagement and spend for every persona you run."
+	description="Status and engagement for every persona you run — and what each has spent, once it has."
 >
 	<div class="dashboard-page">
 
@@ -224,7 +224,7 @@
 			<SparkChart sparkData={data.sparkData} agents={data.sparkAgents} />
 		{:else}
 			<div class="dash-chart-card">
-				<h4>Engagement Trend (7 Days)</h4>
+				<h2>Engagement Trend (7 Days)</h2>
 				<div class="chart-empty">
 					<svg
 						aria-hidden="true"
@@ -505,7 +505,7 @@
 		overflow: hidden;
 	}
 
-	.dash-chart-card h4 {
+	.dash-chart-card h2 {
 		font-size: 0.8rem;
 		font-weight: 700;
 		margin-bottom: 1.25rem;
@@ -517,7 +517,7 @@
 		gap: 8px;
 	}
 
-	.dash-chart-card h4::before {
+	.dash-chart-card h2::before {
 		content: '';
 		display: inline-block;
 		width: 3px;

@@ -90,6 +90,9 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		paymentsOpen: stripeEnabled(),
 		// Open top-up requests this account has made (private: RLS select-own).
 		topupRequests: await pendingTopups(locals.supabase, user.id),
+		// Loaded in the last fortnight: the customer is TOLD it happened, rather
+		// than watching their pending line silently disappear.
+		topupLoaded: await loadedTopups(locals.supabase, user.id),
 		packs: CREDIT_PACKS.map((p) => ({
 			...p,
 			usd: formatMoney(p.usdCents / 100, 'USD', 'en-US'),
@@ -154,6 +157,29 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 	};
 };
 
+
+/** This account's top-up requests loaded in the last 14 days. Never throws. */
+async function loadedTopups(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	supabase: any,
+	userId: string
+): Promise<Array<{ id: string; title: string; updated_at: string }>> {
+	try {
+		const since = new Date(Date.now() - 14 * 86400000).toISOString();
+		const { data } = await supabase
+			.from('tickets')
+			.select('id, title, updated_at')
+			.eq('user_id', userId)
+			.eq('status', 'done')
+			.like('title', `${TOPUP_TITLE_PREFIX}%`)
+			.gte('updated_at', since)
+			.order('updated_at', { ascending: false })
+			.limit(5);
+		return data ?? [];
+	} catch {
+		return [];
+	}
+}
 
 /** This account's open top-up requests, newest first. Never throws. */
 async function pendingTopups(

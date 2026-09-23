@@ -84,9 +84,13 @@ export function templateUsd(t: StudioTemplate, plan: StudioPlan | null): number 
  * Fetch the persona's plan from the free preview. Resolves null on any failure
  * (a viewer seat, a network blip) so callers fall back to the table.
  */
-export async function fetchStudioPlan(agentId: string): Promise<StudioPlan | null> {
+export async function fetchStudioPlan(
+	agentId: string,
+	/** The server load passes its own `event.fetch` (cookies forwarded, no HTTP hop). */
+	fetcher: typeof fetch = fetch
+): Promise<StudioPlan | null> {
 	try {
-		const res = await fetch(`/api/agent/${agentId}/generate-post`, {
+		const res = await fetcher(`/api/agent/${agentId}/generate-post`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ preview: true })

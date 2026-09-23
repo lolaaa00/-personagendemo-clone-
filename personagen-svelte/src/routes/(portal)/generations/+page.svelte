@@ -240,14 +240,16 @@
 >
 
 	<!-- Lens: the load-bearing distinction. Content outputs get published;
-	     profile assets only shape the persona. -->
-	<div class="gen-lens" role="tablist" aria-label="Generation type">
+	     profile assets only shape the persona. A pressed-button group, not
+	     tabs: it narrows which generations the one shared list/toolbar shows
+	     (the toolbar sits between it and the results), so there is no
+	     tab/tabpanel pair to wire — the state is exposed with aria-pressed. -->
+	<div class="gen-lens" role="group" aria-label="Generation type">
 		<button
 			type="button"
-			role="tab"
 			class="lens-btn"
 			class:active={lens === 'content'}
-			aria-selected={lens === 'content'}
+			aria-pressed={lens === 'content'}
 			onclick={() => (lens = 'content')}
 		>
 			<svg
@@ -269,10 +271,9 @@
 		</button>
 		<button
 			type="button"
-			role="tab"
 			class="lens-btn"
 			class:active={lens === 'profile'}
-			aria-selected={lens === 'profile'}
+			aria-pressed={lens === 'profile'}
 			onclick={() => (lens = 'profile')}
 		>
 			<svg

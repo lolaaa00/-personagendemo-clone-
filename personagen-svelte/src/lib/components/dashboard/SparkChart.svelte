@@ -83,7 +83,7 @@
 </script>
 
 <div class="dash-chart-card">
-	<h4>Engagement Trend (7 Days)</h4>
+	<h2>Engagement Trend (7 Days)</h2>
 	{#if !hasData}
 		<div class="spark-empty">
 			<svg
@@ -209,7 +209,7 @@
 		overflow: hidden;
 	}
 
-	.dash-chart-card h4 {
+	.dash-chart-card h2 {
 		font-size: 0.8rem;
 		font-weight: 700;
 		margin-bottom: 1.25rem;
@@ -221,7 +221,7 @@
 		gap: 8px;
 	}
 
-	.dash-chart-card h4::before {
+	.dash-chart-card h2::before {
 		content: '';
 		display: inline-block;
 		width: 3px;

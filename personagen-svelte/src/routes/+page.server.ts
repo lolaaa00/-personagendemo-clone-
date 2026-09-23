@@ -3,7 +3,8 @@ import { creditMarkup } from '$lib/server/flags';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { outcomeStepsUsd, type PostOutcome } from '$lib/server/outcome-prices';
 import { retailCreditsFor, retailCreditsForStep } from '$lib/billing-packs';
-import { formatCredits } from '$lib/money';
+import { formatCredits, resolveDisplayCurrency, localeFromAcceptLanguage, type FxRates } from '$lib/money';
+import { getSettings } from '$lib/server/settings';
 import { priceOf } from '$lib/pricing';
 
 /**
@@ -14,7 +15,7 @@ import { priceOf } from '$lib/pricing';
  * that had drifted from the registry: "$1.58 for a video post" that no format
  * in the product costs (round-2 re-audit).
  */
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ request }) => {
 	const markup = creditMarkup();
 	let credits: Record<PostOutcome, number>;
 	try {
@@ -31,7 +32,27 @@ export const load: PageServerLoad = async () => {
 			talkingHead: retailCreditsFor('talkingHead', markup)
 		};
 	}
-	const usd = (c: number) => formatCredits(c, 'USD', null, 'en-US', { whole: false });
+	// In the VISITOR's currency, resolved exactly as the portal resolves it — a
+	// Manila visitor read "$0.04" here and "₱2.30" on the first screen inside
+	// (re-audit). Never-brick: any failure prints USD.
+	let currency = 'USD';
+	let fx: FxRates | null = null;
+	let locale: string | undefined = 'en-US';
+	try {
+		const settings = getSettings();
+		const acceptLanguage = request.headers.get('accept-language');
+		currency = resolveDisplayCurrency({
+			preference: null,
+			country: request.headers.get('cf-ipcountry'),
+			acceptLanguage,
+			platformDefault: settings.display_currency_default
+		});
+		fx = settings.fx_rates ?? null;
+		locale = localeFromAcceptLanguage(acceptLanguage) ?? 'en-US';
+	} catch {
+		currency = 'USD';
+	}
+	const usd = (c: number) => formatCredits(c, currency, fx, locale, { whole: false });
 	return {
 		receipt: {
 			credits,

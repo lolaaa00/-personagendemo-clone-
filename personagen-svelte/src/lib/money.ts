@@ -292,6 +292,12 @@ export interface PricingContext {
 	fx: FxRates | null;
 	locale?: string;
 	/**
+	 * The viewer's IANA zone (from the `tz` cookie the portal sets in the
+	 * browser). An INSTANT rendered on the server otherwise printed in the
+	 * server's zone and then jumped hours on hydration (re-audit).
+	 */
+	timeZone?: string;
+	/**
 	 * Credits are actually being written (shadow or enforce). A quote is a real
 	 * charge when this is true and an estimate when it is false, and the labels
 	 * on screen have to say which — claiming a debit that will not happen is the

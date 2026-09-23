@@ -10,13 +10,13 @@
 	import { slide } from 'svelte/transition';
 	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
-	import { PRICING_MATRIX } from '$lib/pricing';
+	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
 	// Money on this screen is what the customer pays, not what the provider
 	// charges us: quote() applies the live markup and renders in the viewer's
 	// own currency, the same numbers the sidebar wallet pill shows.
 	import { quote, quoteSteps, quoteStepsRaw, pricingContext } from '$lib/stores/pricing.svelte';
 	import { planPipeline } from '$lib/formats';
-	import { formatCredits } from '$lib/money';
+	import { formatMoney, creditsToAmount } from '$lib/money';
 	import { countLabel, plural } from '$lib/plural';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
@@ -948,15 +948,17 @@
 	let draftTotalMax = $derived.by(() => {
 		if (!draftUnitSteps) return null;
 		const ctx = pricingContext();
-		return formatCredits(quoteStepsRaw(draftUnitSteps) * draftCountMax, ctx.currency, ctx.fx, ctx.locale, {
-			whole: false
-		});
+		// Multiply the per-draft price AS SHOWN (rounded to cents in the viewer's
+		// currency): converting the credit total separately printed
+		// 21 × ₱227.42 as ₱4,775.81 (re-audit).
+		const unit = Math.round(creditsToAmount(quoteStepsRaw(draftUnitSteps), ctx.currency, ctx.fx) * 100) / 100;
+		return formatMoney(unit * draftCountMax, ctx.currency, ctx.locale, { whole: false });
 	});
 	$effect(() => {
 		// The confirm needs the plan even when the Studio tab was never opened.
 		if (!confirmDraftsOpen || studioPlan || !agent?.id) return;
 		const id = agent.id;
-		void fetchStudioPlan(id).then((plan) => {
+		void planFor(id).then((plan) => {
 			if (agent?.id === id && plan) {
 				studioPlan = plan;
 				studioPlanState = 'ready';
@@ -1182,7 +1184,7 @@
 		const id = agent.id;
 		studioPlanFor = id;
 		studioPlanState = 'loading';
-		void fetchStudioPlan(id).then((plan) => {
+		void planFor(id).then((plan) => {
 			if (agent?.id !== id) return;
 			studioPlan = plan;
 			studioPlanState = plan ? 'ready' : 'unavailable';
@@ -1221,12 +1223,40 @@
 	function ensureStudioPlan() {
 		if (studioPlan || !agent?.id) return;
 		const id = agent.id;
-		void fetchStudioPlan(id).then((plan) => {
+		void planFor(id).then((plan) => {
 			if (agent?.id !== id) return;
 			studioPlan = plan;
 			studioPlanState = plan ? 'ready' : 'unavailable';
 		});
 	}
+
+	/**
+	 * One plan request per persona: the server load streams it with the page
+	 * (data.studioPlan); only when that is missing or failed does the browser
+	 * ask for it itself.
+	 */
+	let planCache: { id: string; p: Promise<StudioPlan | null> } | null = null;
+	function planFor(id: string): Promise<StudioPlan | null> {
+		if (planCache?.id === id) return planCache.p;
+		const streamed = (data as { studioPlan?: Promise<StudioPlan | null> | null }).studioPlan;
+		const p =
+			streamed && agent?.id === id
+				? Promise.resolve(streamed).then((x) => x ?? fetchStudioPlan(id))
+				: fetchStudioPlan(id);
+		planCache = { id, p };
+		return p;
+	}
+	// Take the streamed plan as soon as it lands, whatever tab is open — so the
+	// Studio tiles, the rate card and the drafts confirm are priced on arrival.
+	$effect(() => {
+		const id = agent?.id;
+		if (!id || studioPlan) return;
+		void planFor(id).then((plan) => {
+			if (agent?.id !== id || studioPlan) return;
+			if (plan) studioPlan = plan;
+			studioPlanState = plan ? 'ready' : 'unavailable';
+		});
+	});
 
 	/** Per-stage USD for a tile, or null until the plan answers (never the stale table). */
 	const tileSteps = (t: StudioTemplate) => templateStepsUsd(t, studioPlan);
@@ -1511,8 +1541,21 @@
 	let generatingKitBio = $state(false);
 	let kitBusy = $derived(generatingKit || generatingKitBase || generatingKitBio);
 
+	/**
+	 * The identity kit is written by the persona's OWNER only — the engine
+	 * answers anyone else "Persona not found". Say so on the button instead of
+	 * letting a workspace seat click into that (re-audit).
+	 */
+	let kitLock = $derived(
+		agent?.user_id && (data as any)?.user?.id && agent.user_id !== (data as any).user.id
+			? "Only the persona's owner can write its identity kit."
+			: null
+	);
+	/** One metered text call per click — shown on every kit button. */
+	let kitPrice = $derived(quote(priceOf('openrouter', 'llm')));
+
 	async function generateKit(scope: 'starter' | 'base' | 'bio') {
-		if (!agent?.id || kitBusy) return;
+		if (!agent?.id || kitBusy || kitLock) return;
 		const opts =
 			scope === 'base'
 				? { platforms: [] as string[], includeBase: true }
@@ -3451,7 +3494,8 @@
 									? 'starter'
 									: 'bio'
 							)}
-						disabled={kitBusy}
+						disabled={kitBusy || !!kitLock}
+						title={kitLock ?? `One writing call — ${kitPrice}`}
 						>{#if kitBusy}Generating…{:else}<svg
 								width="14"
 								height="14"
@@ -3468,7 +3512,8 @@
 							>
 							{ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0
 								? 'Generate identity kit'
-								: `Generate ${platformLabel(kitPlatform)} bio`}{/if}</button
+								: `Generate ${platformLabel(kitPlatform)} bio`}
+							<span class="kit-price">· {kitPrice}</span>{/if}</button
 					>
 				{/if}
 				{#if ppConfirmedHandles[kitPlatform]}
@@ -4442,6 +4487,7 @@
 							<div class="section-header">
 								<div class="label-row">
 									<h2 class="section-title">Platform Identity Kit</h2>
+									{#if kitLock}<span class="kit-lock-note">{kitLock}</span>{/if}
 									<span
 										class="kit-save-state"
 										class:error={kitSaveState === 'error'}
@@ -4500,8 +4546,8 @@
 								e.stopPropagation();
 								generateKit('starter');
 							}}
-							disabled={kitBusy}
-							title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
+							disabled={kitBusy || !!kitLock}
+							title={kitLock ?? `One small call (${kitPrice}): display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)`}
 						>
 							{#if generatingKit}Generating…{:else}<svg
 									width="13"
@@ -4627,8 +4673,8 @@
 										type="button"
 										class="btn-sync btn-xs"
 										onclick={() => generateKit('base')}
-										disabled={kitBusy}
-										title="Generate 10 fresh username candidates + display name — your taken/confirmed marks are kept"
+										disabled={kitBusy || !!kitLock}
+										title={kitLock ?? `Generate 10 fresh username candidates + display name — your taken/confirmed marks are kept — one call, ${kitPrice}`}
 									>
 										{#if generatingKitBase}Generating…{:else}<svg
 												width="13"
@@ -4807,10 +4853,9 @@
 											type="button"
 											class="btn-sync btn-xs"
 											onclick={() => generateKit('bio')}
-											disabled={kitBusy}
-											title="Generate the {platformLabel(
-												kitPlatform
-											)} bio only — other platforms' bios are untouched"
+											disabled={kitBusy || !!kitLock}
+											title={kitLock ??
+												`Generate the ${platformLabel(kitPlatform)} bio only (${kitPrice}) — other platforms' bios are untouched`}
 										>
 											{#if generatingKitBio}Generating…{:else}<svg
 													width="13"
@@ -6191,6 +6236,10 @@
 										</tbody>
 									</table>
 								</div>
+							{:else if studioPlanState === 'loading' && seatCanGenerate}
+								<!-- Never the generic table first and this persona's rates a moment
+								     later: the swap read as the prices changing (re-audit). -->
+								<p class="field-hint" role="status">Loading this persona's rates…</p>
 							{:else}
 							<div class="pricing-table-wrap">
 								<table class="pricing-table">
@@ -7960,6 +8009,9 @@
 	}
 	.studio-payer a {
 		color: var(--accent-text);
+		/* A link inside prose is told apart by more than colour (WCAG 1.4.1). */
+		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 	.studio-cost,
 	.studio-time {
@@ -10612,5 +10664,34 @@
 		.post-mosaic {
 			grid-template-columns: 1fr;
 		}
+	}
+	/* 320–414: three 1rem-padded tabs plus the avatar needed ~300px of a 240px
+	   strip, and "Studio" was clipped (re-audit). Tighter tabs, and the avatar
+	   gives way on the narrowest phones (the page header names the persona). */
+	@media (max-width: 480px) {
+		.tab-btn {
+			min-width: 0;
+			padding: 0.55rem 0.35rem;
+			gap: 5px;
+			font-size: 0.8rem;
+		}
+		.tab-nav {
+			gap: 0.4rem;
+		}
+	}
+	@media (max-width: 380px) {
+		.tab-nav-identity {
+			display: none;
+		}
+	}
+	.kit-price {
+		font-weight: 500;
+		font-variant-numeric: tabular-nums;
+	}
+	.kit-lock-note {
+		display: block;
+		margin: var(--space-1) 0 0;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 </style>

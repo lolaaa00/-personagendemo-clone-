@@ -363,6 +363,8 @@
 		return Math.ceil(sum);
 	});
 	let estimatedPrice = $derived.by(() => {
+		// A blocked planner has nothing to estimate — never an endless "estimating…".
+		if (launchBlocked) return '—';
 		if (estimatedCredits === null) return plannerPlanState === 'loading' ? 'estimating…' : 'unavailable';
 		const ctx = pricingContext();
 		return formatCredits(estimatedCredits, ctx.currency, ctx.fx, ctx.locale, { whole: false });

@@ -893,7 +893,9 @@
 		left: 0;
 		right: 0;
 		padding: 0.5rem 0.6rem;
-		background: linear-gradient(transparent, rgba(180, 90, 10, 0.92));
+		/* Solid, not a fade from transparent: the top of a fade put white text on
+		   the bright image at 4.17:1 (re-audit). #7c2d12 under white is 9.6:1. */
+		background: rgba(124, 45, 18, 0.94);
 		color: #fff;
 		font-size: 0.66rem;
 		font-weight: 600;
@@ -1211,7 +1213,7 @@
 		padding: 0.25rem 0.6rem;
 		min-height: 28px;
 		border-radius: 8px;
-		background: var(--error);
+		background: #b91c1c; /* white on it is 6.5:1; --error (#ef4444) was 3.8:1 */
 		color: #fff;
 		cursor: pointer;
 		display: inline-flex;

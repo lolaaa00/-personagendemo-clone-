@@ -25,6 +25,20 @@
 	let tab = $state<Tab>(readParam('tab', ['posts', 'personas'] as const, 'posts'));
 	$effect(() => syncParam('tab', tab, 'posts'));
 
+	const FAV_TABS = ['posts', 'personas'] as const;
+	function onFavTabKeydown(e: KeyboardEvent) {
+		const i = FAV_TABS.indexOf(tab);
+		let next = i;
+		if (e.key === 'ArrowRight') next = (i + 1) % FAV_TABS.length;
+		else if (e.key === 'ArrowLeft') next = (i - 1 + FAV_TABS.length) % FAV_TABS.length;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = FAV_TABS.length - 1;
+		else return;
+		e.preventDefault();
+		tab = FAV_TABS[next];
+		document.getElementById(`fav-tab-${tab}`)?.focus();
+	}
+
 	function groupName(groupId: string | null): string | null {
 		if (!groupId) return null;
 		return groups.find((g: any) => g.id === groupId)?.name ?? null;
@@ -118,14 +132,20 @@
 	description="Everything you've hearted — best posts and go-to personas, one tap away."
 >
 
+	<!-- A complete tabs pattern: Posts and Personas are two different panels,
+	     so roving tabindex + arrow/Home/End keys + a labelled tabpanel. -->
 	<div class="fav-tabs" role="tablist" aria-label="Favorite type">
 		<button
 			type="button"
 			role="tab"
+			id="fav-tab-posts"
 			class="fav-tab"
 			class:active={tab === 'posts'}
 			aria-selected={tab === 'posts'}
+			aria-controls="fav-tabpanel"
+			tabindex={tab === 'posts' ? 0 : -1}
 			onclick={() => (tab = 'posts')}
+			onkeydown={onFavTabKeydown}
 		>
 			Posts
 			<span class="fav-count">{posts.length}</span>
@@ -133,16 +153,21 @@
 		<button
 			type="button"
 			role="tab"
+			id="fav-tab-personas"
 			class="fav-tab"
 			class:active={tab === 'personas'}
 			aria-selected={tab === 'personas'}
+			aria-controls="fav-tabpanel"
+			tabindex={tab === 'personas' ? 0 : -1}
 			onclick={() => (tab = 'personas')}
+			onkeydown={onFavTabKeydown}
 		>
 			Personas
 			<span class="fav-count">{personas.length}</span>
 		</button>
 	</div>
 
+	<div id="fav-tabpanel" role="tabpanel" aria-labelledby="fav-tab-{tab}" tabindex="0">
 	{#if tab === 'posts'}
 		{#if posts.length === 0}
 			<div class="fav-empty">
@@ -304,6 +329,7 @@
 			{/each}
 		</div>
 	{/if}
+	</div>
 </PageShell>
 
 {#if modalPost}

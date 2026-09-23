@@ -39,6 +39,16 @@
 
 	onMount(() => {
 		initializeThemeAndColors();
+		// Tell the server the viewer's zone, so the NEXT server render prints
+		// instants in it rather than the server's (see PricingContext.timeZone).
+		try {
+			const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+			if (tz && !document.cookie.split('; ').includes(`tz=${tz}`)) {
+				document.cookie = `tz=${tz}; path=/; max-age=31536000; samesite=lax`;
+			}
+		} catch {
+			/* no Intl zone — the server keeps its default */
+		}
 	});
 
 	// ── Pending workspace invites — "you've been invited" banner ────────────
@@ -412,9 +422,12 @@
 	}}
 />
 
-<a href="#main-content" class="skip-link">Skip to main content</a>
+<!-- While the password dialog is up, EVERYTHING behind it is inert — not just
+     trapped by focus handling: a screen reader's virtual cursor walked the
+     sidebar and page behind the modal (re-audit). -->
+<a href="#main-content" class="skip-link" inert={showPasswordGate}>Skip to main content</a>
 
-<div class="portal-layout" class:sidebar-collapsed={sidebarState.collapsed}>
+<div class="portal-layout" class:sidebar-collapsed={sidebarState.collapsed} inert={showPasswordGate}>
 	<!-- Sidebar overlay (mobile) -->
 	{#if sidebarState.open}
 		<button class="sidebar-overlay" onclick={closeSidebar} aria-label="Close sidebar" tabindex="-1"
@@ -1626,7 +1639,9 @@
 		transform: translate(-50%, -50%);
 	}
 
-	.sidebar:hover .sidebar-collapse-btn {
+	.sidebar:hover .sidebar-collapse-btn,
+	.sidebar:focus-within .sidebar-collapse-btn,
+	.sidebar-collapse-btn:focus-visible {
 		opacity: 1;
 	}
 
@@ -1829,7 +1844,7 @@
 	/* Short screens (a 1366x768 laptop gives the page ~657px): 28px rows (WCAG
 	   2.5.8 asks for 24) and slimmer group labels keep all eleven destinations
 	   above the fold with room left for persona rows. */
-	@media (pointer: fine) and (min-width: 769px) and (max-height: 720px) {
+	@media (pointer: fine) and (min-width: 769px) and (max-height: 800px) {
 		.sidebar-nav .sidebar-nav-item,
 		.sidebar-bottom .sidebar-nav-item {
 			min-height: 28px;
@@ -1842,6 +1857,16 @@
 		}
 		.sidebar-plan-badge {
 			padding: 6px 10px;
+		}
+		/* At 768 tall an owner saw one persona row (re-audit). The group labels
+		   become hairline dividers — their text stays in the accessibility tree
+		   (font-size 0, not display:none) — returning ~70px to the persona list. */
+		.sidebar-nav .sidebar-section-label {
+			font-size: 0;
+			padding: 0;
+			margin: 5px 10px;
+			height: 1px;
+			background: var(--border);
 		}
 	}
 

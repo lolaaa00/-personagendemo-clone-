@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { pricingContext } from '$lib/stores/pricing.svelte';
 	import { formatCredits } from '$lib/money';
+	import { instantShort } from '$lib/datetime';
 	import { promptAction, confirmAction } from '$lib/stores/confirm.svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
@@ -185,18 +186,9 @@
 	});
 
 	const money = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
-	const when = (iso: string) => {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return '—';
-		// Same shape as /billing ("Sep 9, 9:15 PM"). A month-first numeric date is
-		// ambiguous everywhere outside the US, and this workspace bills in PHP.
-		return d.toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	};
+	// Same shape as /billing ("Sep 9, 9:15 PM"), in the viewer's locale and zone
+	// on the server as well as after hydration.
+	const when = (iso: string) => instantShort(iso);
 
 	let activityFilter = $state<'all' | 'generation' | 'review' | 'publish'>('all');
 	let filteredActivity = $derived(
@@ -476,6 +468,11 @@
 		{/if}
 	</header>
 
+	<!-- These figures cover the workspaces listed above. A platform admin who
+	     runs none saw "$0.00 · 0 · 0 · 0 · 0" directly above the platform-wide
+	     view, contradicting the non-zero debits beneath it (round-3 re-audit). -->
+	{#if data.stats.personaCount > 0 || data.stats.seatCount > 0}
+	<div class="tab-group-label">Your workspaces</div>
 	<div class="stat-row">
 		<!-- Spend as the WALLETS were charged — retail, in the viewer's currency —
 		     not raw provider cost in "$". Seat caps are enforced in retail, so the
@@ -487,6 +484,7 @@
 		<div class="stat"><span class="stat-n">{data.stats.seatCount}</span><span class="stat-l">Seats</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.personaCount}</span><span class="stat-l">Personas</span></div>
 	</div>
+	{/if}
 
 	{#if data.isPlatformAdmin}
 		<div class="tab-group-label">Platform — every tenant</div>
@@ -691,8 +689,9 @@
 					<section class="pkeys" aria-labelledby="topup-req-h">
 						<h3 id="topup-req-h">Top-up requests waiting ({controls.topupRequests.length})</h3>
 						<p class="admin-hint">
-							Card payments are off, so customers ask from Billing and the credit is loaded by hand
-							(Credits tab → grant). Oldest first.
+							Card payments are off, so customers ask from Billing. <strong>Load</strong> grants the
+							pack named in the request to their wallet and closes it — once, however often it is
+							pressed. Oldest first.
 						</p>
 						<ul class="topup-req-list">
 							{#each controls.topupRequests as r (r.id)}
@@ -704,7 +703,7 @@
 										class="admin-link"
 										disabled={closingTicket === r.id}
 										onclick={() => closeRequest(r.id)}
-										>{closingTicket === r.id ? 'Closing…' : 'Mark loaded'}</button
+										>{closingTicket === r.id ? 'Loading…' : `Load ${r.title.replace(/^Top-up request · [^$]*/, '')}`}</button
 									>
 									{#if r.description}<p class="muted small">{r.description}</p>{/if}
 								</li>
@@ -1082,7 +1081,7 @@
 					<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 					<div class="table-scroll" role="region" aria-label="Change history" tabindex="0">
-						<table class="admin-table">
+						<table class="admin-table hist-table">
 							<thead><tr><th>When</th><th>Setting</th><th>From</th><th>To</th><th>Note</th><th>By</th></tr></thead>
 							<tbody>
 								{#each controls.history as h (h.changed_at + h.key)}
@@ -1110,7 +1109,7 @@
 					<h2>Every account on the platform</h2>
 					<p class="admin-hint">
 						Wallets, sign-ins, and this month's metered spend across all tenants. 1 credit = 1¢ of
-						estimated provider cost. Every grant, set, adjustment and comp is a ledger row with you as
+						retail generation (provider cost × the platform markup) — what the customer pays. Every grant, set, adjustment and comp is a ledger row with you as
 						the actor — nothing here is ever edited or deleted.
 					</p>
 				</div>
@@ -1754,6 +1753,13 @@
 	.table-scroll {
 		overflow-x: auto;
 		max-width: 100%;
+	}
+	/* A JSON value (a price map, a model list) is one unbroken token: it set the
+	   whole table thousands of pixels wide. Values wrap inside a bounded column. */
+	.hist-table td.mono {
+		max-width: 28ch;
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 	.table-scroll:focus-visible {
 		outline: 2px solid var(--focus-ring);

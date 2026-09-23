@@ -20,6 +20,15 @@ function locale(): string | undefined {
 	return pricingContext().locale ?? undefined;
 }
 
+/**
+ * The viewer's zone for INSTANTS only. A slot is a wall-clock time and is
+ * deliberately printed zone-free; an instant (created_at, a ledger row) is a
+ * moment, and must print the same moment on the server and after hydration.
+ */
+function zone(): string | undefined {
+	return pricingContext().timeZone ?? undefined;
+}
+
 /** A stored slot ("2026-09-22", "14:00:00") as a Date, or null. */
 export function slotDate(date: string | null | undefined, time?: string | null): Date | null {
 	if (!date || !/^\d{4}-\d{2}-\d{2}/.test(date)) return null;
@@ -57,7 +66,22 @@ export function instantDateTime(iso: string | null | undefined): string {
 		month: 'short',
 		day: 'numeric',
 		hour: 'numeric',
-		minute: '2-digit'
+		minute: '2-digit',
+		timeZone: zone()
+	});
+}
+
+/** An instant as "Sep 9, 9:15 PM" — the Billing / Admin ledger form. */
+export function instantShort(iso: string | null | undefined): string {
+	if (!iso) return '—';
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return '—';
+	return d.toLocaleString(locale(), {
+		month: 'short',
+		day: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit',
+		timeZone: zone()
 	});
 }
 
