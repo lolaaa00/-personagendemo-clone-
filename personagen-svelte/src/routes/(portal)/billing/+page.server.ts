@@ -92,10 +92,15 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		topupRequests: await pendingTopups(locals.supabase, user.id),
 		// Loaded in the last fortnight: the customer is TOLD it happened, rather
 		// than watching their pending line silently disappear.
-		topupLoaded: (await loadedTopups(locals.supabase, user.id)).map((t) => ({
-			...t,
-			amount: formatCredits(t.credits, currency, s.fx_rates, locale, { whole: false })
-		})),
+		topupLoaded: (await loadedTopups(locals.supabase, user.id)).map((t) => {
+			const scale = Math.pow(10, minorUnitDigits(currency));
+			const minor = (c: number) => Math.round(creditsToAmount(c, currency, s.fx_rates) * scale);
+			const shown =
+				t.minorDelta === null
+					? creditsToAmount(t.credits, currency, s.fx_rates)
+					: Math.abs(minor(t.minorDelta + t.credits) - minor(t.minorDelta)) / scale;
+			return { ...t, amount: formatMoney(shown, currency, locale, { whole: false }) };
+		}),
 		packs: CREDIT_PACKS.map((p) => ({
 			...p,
 			usd: formatMoney(p.usdCents / 100, 'USD', 'en-US'),
@@ -183,7 +188,7 @@ async function loadedTopups(
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
 	supabase: any,
 	userId: string
-): Promise<Array<{ id: string; title: string; updated_at: string; loaded: boolean; credits: number }>> {
+): Promise<Array<{ id: string; title: string; updated_at: string; loaded: boolean; credits: number; minorDelta: number | null }>> {
 	try {
 		const since = new Date(Date.now() - 14 * 86400000).toISOString();
 		const { data } = await supabase
@@ -200,21 +205,24 @@ async function loadedTopups(
 		// The grant credit_apply() wrote when Load was pressed (see api/admin/requests).
 		const { data: grants } = await supabase
 			.from('credit_ledger')
-			.select('stripe_event_id, delta')
+			.select('stripe_event_id, delta, balance_after')
 			.eq('user_id', userId)
 			.in(
 				'stripe_event_id',
 				tickets.map((t) => `topup-request:${t.id}`)
 			);
-		const credited = new Map<string, number>(
-			((grants ?? []) as Array<{ stripe_event_id: string; delta: number | string }>).map((g) => [
-				g.stripe_event_id,
-				Number(g.delta) || 0
-			])
+		const credited = new Map<string, { credits: number; after: number }>(
+			((grants ?? []) as Array<{ stripe_event_id: string; delta: number | string; balance_after: number | string }>).map(
+				(g) => [g.stripe_event_id, { credits: Number(g.delta) || 0, after: Number(g.balance_after) || 0 }]
+			)
 		);
 		return tickets.map((t) => {
-			const credits = credited.get(`topup-request:${t.id}`) ?? 0;
-			return { ...t, loaded: credits > 0, credits };
+			const g = credited.get(`topup-request:${t.id}`);
+			const credits = g?.credits ?? 0;
+			// The ledger row shows its delta as the difference of the two shown
+			// balances; the load line must print that SAME figure, or one event
+			// reads as two amounts a unit apart in ¥/₩/£ (round-8 re-audit).
+			return { ...t, loaded: credits > 0, credits, minorDelta: g ? g.after - credits : null };
 		});
 	} catch {
 		return [];

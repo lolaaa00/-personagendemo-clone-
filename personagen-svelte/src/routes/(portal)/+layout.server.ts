@@ -273,6 +273,7 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 							const compactFmt = new Intl.NumberFormat(locale, {
 								style: 'currency',
 								currency,
+								currencyDisplay: 'narrowSymbol',
 								notation: 'compact',
 								minimumFractionDigits: 0,
 								maximumFractionDigits: 1
@@ -285,12 +286,14 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 							return new Intl.NumberFormat(locale, {
 								style: 'currency',
 								currency,
+								currencyDisplay: 'narrowSymbol',
 								maximumFractionDigits: 0
 							}).format(whole);
 						}
 						return new Intl.NumberFormat(locale, {
 							style: 'currency',
 							currency,
+							currencyDisplay: 'narrowSymbol',
 							...(tiny ? { maximumFractionDigits: 2 } : { maximumFractionDigits: 0 })
 						}).format(shown);
 					} catch {

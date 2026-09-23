@@ -623,7 +623,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-23", hash: "51a88a8", type: "fix", category: "fix", scope: "a11y", title: "review strip scrolls the focused select into view after the browser's own focus scroll, instantly" },
 	{ date: "2026-09-23", hash: "074d9b4", type: "fix", category: "fix", scope: "a11y", title: "the review filter strip is a named, focusable scroll region in every engine" },
 	{ date: "2026-09-23", hash: "680a160", type: "fix", category: "fix", scope: "audit", title: "round 7 — the Money, Access and Setup critics' lists" },
-	{ date: "2026-09-23", hash: "a78d2db", type: "fix", category: "fix", scope: "audit", title: "round 7 follow-ups — the persona Calendar lens, the calendar header and the per-day + follow the seat" }
+	{ date: "2026-09-23", hash: "a78d2db", type: "fix", category: "fix", scope: "audit", title: "round 7 follow-ups — the persona Calendar lens, the calendar header and the per-day + follow the seat" },
+	{ date: "2026-09-23", hash: "0034e14", type: "fix", category: "fix", scope: "audit", title: "round 8 — the Access and Setup critics' lists" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1063,10 +1064,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "6ad7e09", from: "2026-09-23", to: "2026-09-23",
 		category: "fix", categories: ["fix"],
 		title: "Fixed: round 6 — the Setup and Access critics' lists",
-		summary: "Round 6 — the Setup and Access critics' lists. Plus 8 more changes.",
+		summary: "Round 6 — the Setup and Access critics' lists. Plus 9 more changes.",
 		major: true, curated: false,
-		entries: [CHANGELOG[581], CHANGELOG[582], CHANGELOG[583], CHANGELOG[584], CHANGELOG[585], CHANGELOG[586], CHANGELOG[587], CHANGELOG[588], CHANGELOG[589]]
+		entries: [CHANGELOG[581], CHANGELOG[582], CHANGELOG[583], CHANGELOG[584], CHANGELOG[585], CHANGELOG[586], CHANGELOG[587], CHANGELOG[588], CHANGELOG[589], CHANGELOG[590]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "a78d2db";
+export const CHANGELOG_GENERATED_FROM = "0034e14";
