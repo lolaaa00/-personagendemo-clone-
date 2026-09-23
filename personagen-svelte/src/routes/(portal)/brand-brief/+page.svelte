@@ -10,6 +10,8 @@
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import { countLabel } from '$lib/plural';
+	import { quote } from '$lib/stores/pricing.svelte';
+	import { priceOf } from '$lib/pricing';
 
 	let { data } = $props<{
 		data: {
@@ -277,6 +279,14 @@
 	 * original rule that an unknown status must never disable a working button.
 	 */
 	let firecrawlReady = $derived(data.firecrawlAvailable !== false);
+
+	/** Price before the click (audit ENH-003 / UX-002): Generate, Spin and AI Enrich
+	 *  are one writing call each; a scrape is metered per page Firecrawl reads.
+	 *  These calls carry no persona, so they bill the clicker's OWN wallet — the
+	 *  label says so because the sidebar pill names the workspace wallet. */
+	let llmPrice = $derived(quote(priceOf('openrouter', 'llm')));
+	let scrapePrice = $derived(quote(priceOf('firecrawl', 'scrape')));
+	const ownWallet = 'charged to your own wallet';
 	let extending = $state<Record<string, boolean>>({});
 	let generating = $state<Record<string, boolean>>({});
 	let spinning = $state<Record<string, boolean>>({});
@@ -1050,13 +1060,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							aria-busy={scraping}
 							title={!firecrawlReady
 								? 'Research is unavailable on this deployment right now'
-								: undefined}
+								: `Reads the page with Firecrawl — ${scrapePrice} per page read, ${ownWallet}`}
 						>
 							{#if scraping}
 								<div class="btn-spinner"></div>
 								Scraping Store...
 							{:else}
-								<span>Scrape & Populate</span>
+								<span>Scrape &amp; Populate</span><span class="enrich-price">· from {scrapePrice} per page</span>
 							{/if}
 						</button>
 					</div>
@@ -1072,6 +1082,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</p>
 				</div>
 
+				<p class="brief-cost-note">
+					Generate, Spin and AI Enrich each make one writing call ({llmPrice}); Scrape &amp; Populate
+					is {scrapePrice} per page it reads. All of it is charged to your own wallet, not a workspace wallet.
+				</p>
 				<div class="panel-header-row">
 					<h2>Brand Overview</h2>
 				</div>
@@ -1093,6 +1107,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => generateField('Tagline', (v) => (tagline = v))}
 									disabled={generating['Tagline']}
 								>
@@ -1110,10 +1125,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Tagline', tagline)}
 									disabled={spinning['Tagline'] || !tagline.trim()}
 								>
@@ -1133,7 +1149,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -1163,6 +1179,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => generateField('Mission Statement', (v) => (mission = v))}
 									disabled={generating['Mission Statement']}
 								>
@@ -1180,18 +1197,20 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))}
 									disabled={extending['Mission Statement'] || !mission.trim()}
 								>
 									{#if extending['Mission Statement']}<div class="enrich-spinner"></div>
-										Enriching...{:else}AI Enrich{/if}
+										Enriching...{:else}AI Enrich <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Mission Statement', mission)}
 									disabled={spinning['Mission Statement'] || !mission.trim()}
 								>
@@ -1211,7 +1230,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -1475,7 +1494,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							onclick={scrapeProductByUrl}
 							disabled={scrapingProduct || !firecrawlReady}
 							aria-busy={scrapingProduct}
-							title={!firecrawlReady ? 'Research is unavailable on this deployment right now' : undefined}
+							title={!firecrawlReady ? 'Research is unavailable on this deployment right now' : `Reads the page with Firecrawl — ${scrapePrice} per page read, ${ownWallet}`}
 						>
 							{#if scrapingProduct}
 								Scraping…
@@ -1622,6 +1641,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'UGC Video Script Guidelines and Formats for this brand',
@@ -1644,19 +1664,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))}
 									disabled={extending['UGC Guidelines'] || !ugcGuidelines.trim()}
 								>
 									{#if extending['UGC Guidelines']}<div class="enrich-spinner"></div>
-										Enriching...{:else}AI Enrich{/if}
+										Enriching...{:else}AI Enrich <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('UGC Guidelines', ugcGuidelines)}
 									disabled={spinning['UGC Guidelines'] || !ugcGuidelines.trim()}
 								>
@@ -1676,7 +1698,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -1802,6 +1824,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								<label for="fontPrimary">Primary Font</label>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Primary Font (suggest a Google Font name matching the brand personality)',
@@ -1839,6 +1862,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								<label for="fontSecondary">Secondary Font</label>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Secondary Font (a complementary Google Font to pair with ' +
@@ -1887,6 +1911,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="traitInput">Personality Traits</label>
 							<button
 								class="enrich-btn"
+								title="One writing call — {llmPrice}, {ownWallet}"
 								onclick={async () => {
 									generating = { ...generating, Traits: true };
 									try {
@@ -2000,6 +2025,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Sample Social Media Post (write a realistic brand post in the brand voice described above)',
@@ -2022,10 +2048,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Sample Post', samplePost)}
 									disabled={spinning['Sample Post'] || !samplePost.trim()}
 								>
@@ -2045,7 +2072,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -2106,6 +2133,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Target Audience Demographics',
@@ -2128,19 +2156,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										extendField('Demographics', demographics, (v) => (demographics = v))}
 									disabled={extending['Demographics'] || !demographics.trim()}
 								>
 									{#if extending['Demographics']}<div class="enrich-spinner"></div>
-										Enriching...{:else}AI Enrich{/if}
+										Enriching...{:else}AI Enrich <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Demographics', demographics)}
 									disabled={spinning['Demographics'] || !demographics.trim()}
 								>
@@ -2160,7 +2190,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -2188,6 +2218,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Audience Interests & Behaviors',
@@ -2210,19 +2241,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										extendField('Interests & Behaviors', interests, (v) => (interests = v))}
 									disabled={extending['Interests & Behaviors'] || !interests.trim()}
 								>
 									{#if extending['Interests & Behaviors']}<div class="enrich-spinner"></div>
-										Enriching...{:else}AI Enrich{/if}
+										Enriching...{:else}AI Enrich <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Interests', interests)}
 									disabled={spinning['Interests'] || !interests.trim()}
 								>
@@ -2242,7 +2275,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -2270,6 +2303,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Primary Social Media Platforms for target audience',
@@ -2292,10 +2326,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Platforms', platforms)}
 									disabled={spinning['Platforms'] || !platforms.trim()}
 								>
@@ -2315,7 +2350,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -2343,6 +2378,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="ai-btn-group">
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() =>
 										generateField(
 											'Customer Pain Points this brand solves',
@@ -2365,18 +2401,20 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
 												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
 											/></svg
-										>Generate{/if}
+										>Generate <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))}
 									disabled={extending['Pain Points'] || !painPoints.trim()}
 								>
 									{#if extending['Pain Points']}<div class="enrich-spinner"></div>
-										Enriching...{:else}AI Enrich{/if}
+										Enriching...{:else}AI Enrich <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 								<button
 									class="enrich-btn spin"
+									title="One writing call — {llmPrice}, {ownWallet}"
 									onclick={() => spinField('Pain Points', painPoints)}
 									disabled={spinning['Pain Points'] || !painPoints.trim()}
 								>
@@ -2396,7 +2434,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/><path
 												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
 											/></svg
-										>Spin{/if}
+										>Spin <span class="enrich-price">· {llmPrice}</span>{/if}
 								</button>
 							</div>
 						</div>
@@ -4126,5 +4164,20 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		.presets-list {
 			grid-template-columns: 1fr;
 		}
+	}
+	.enrich-price {
+		font-weight: 500;
+		opacity: 0.85;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.brief-cost-note {
+		margin: 0 0 var(--space-4);
+		font-size: 0.875rem;
+		line-height: 1.45;
+		opacity: 0.8;
+	}
+	.scrape-submit-btn .enrich-price {
+		margin-inline-start: 0.35em;
 	}
 </style>

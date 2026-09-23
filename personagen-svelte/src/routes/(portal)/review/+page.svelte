@@ -584,7 +584,7 @@
 	/** The filter strip only scrolls (and is only a tab stop) on phones. */
 	let stripScrolls = $state(false);
 	onMount(() => {
-		const mq = window.matchMedia('(max-width: 767px)');
+		const mq = window.matchMedia('(max-width: 768px)');
 		const sync = () => (stripScrolls = mq.matches);
 		sync();
 		mq.addEventListener('change', sync);
@@ -593,7 +593,7 @@
 	onMount(() => {
 		const saved = localStorage.getItem(VIEW_STORE) as ViewMode | null;
 		if (saved && VIEWS.some((v) => v.id === saved)) viewMode = saved;
-		else if (window.matchMedia('(max-width: 767px)').matches) viewMode = 'deck';
+		else if (window.matchMedia('(max-width: 768px)').matches) viewMode = 'deck';
 	});
 	function setView(v: ViewMode) {
 		viewMode = v;
@@ -2615,7 +2615,7 @@
 	   nothing, because a filter you have to scroll to is still a filter you can
 	   see. And the media is capped against the viewport so the caption and the
 	   verbs stay above the fold instead of being pushed down by a tall crop. */
-	@media (max-width: 767px) {
+	@media (max-width: 768px) {
 		/* One scrolling row, with two things the first version got wrong.
 		
 		   The row scrolls (609px of content in a 296px viewport at 360) and said
@@ -2677,7 +2677,7 @@
 			scroll-behavior: auto;
 		}
 	}
-	@media (max-width: 767px) {
+	@media (max-width: 768px) {
 		/* Icon-only view switcher: five labelled buttons wrap to two rows at
 		   360px. `title` and the visually-hidden label keep the meaning. */
 		.vs-label {
@@ -2705,7 +2705,7 @@
 		min-width: 0;
 		max-width: 100%;
 	}
-	@media (max-width: 767px) {
+	@media (max-width: 768px) {
 		.queue-toolbar > .filter-row {
 			flex: 1 1 100%;
 		}
@@ -2864,7 +2864,7 @@
 	.cap-meta span + span::before {
 		content: ' · ';
 	}
-	@media (max-width: 767px) {
+	@media (max-width: 768px) {
 		.cap-open {
 			white-space: normal;
 			min-height: 0;
@@ -3098,7 +3098,7 @@
 	   declared in one place has been silently overridden by one declared in
 	   another. Keeping a property's rules adjacent is the fix; splitting them is
 	   the bug. */
-	@media (max-width: 767px) {
+	@media (max-width: 768px) {
 		.deck-media {
 			/* Sized so the caption clears the PINNED CONTROL BAR, not just the fold.
 			
@@ -3116,7 +3116,7 @@
 	/* Below this height the chrome alone eats the viewport (640x500 is 200% zoom
 	   on a 1280 screen), nothing can be made to fit, and a pinned bar is just an
 	   obstruction. Let it scroll with the content instead. */
-	@media (max-width: 767px) and (max-height: 620px) {
+	@media (max-width: 768px) and (max-height: 620px) {
 		.deck-controls {
 			position: static;
 			background: none;
@@ -3172,7 +3172,7 @@
 		align-items: center;
 		padding: var(--space-5) 0 var(--space-2);
 	}
-	@media (max-width: 767px) {
+	@media (max-width: 768px) {
 		/* The decision controls stay on screen.
 		
 		   Deck view is the phone's triage mode, and the whole point of it is one
@@ -3413,7 +3413,7 @@
 		}
 	}
 	/* The strip's mask clips an outline drawn outside the box, so its focus
-	   ring vanished at ≤767 (round-7 re-audit): draw it inside. */
+	   ring vanished at ≤768 (round-7 re-audit): draw it inside. */
 	.filter-bar:focus-visible {
 		outline: 2px solid var(--focus-ring);
 		outline-offset: -2px;

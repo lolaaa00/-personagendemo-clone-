@@ -2485,4 +2485,10 @@
 		outline: 2px solid var(--focus-ring);
 		outline-offset: -2px;
 	}
+	/* The week chip is a button INSIDE that clipped block: an outside ring showed
+	   6–25% of itself (round-9 re-audit), so it draws inside as well. */
+	.event-main:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: -2px;
+	}
 </style>

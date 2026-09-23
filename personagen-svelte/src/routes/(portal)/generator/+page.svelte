@@ -7,6 +7,11 @@
 	import { PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS } from '$lib/persona-profile';
 	import { MARKETS } from '$lib/markets';
 	import { quote } from '$lib/stores/pricing.svelte';
+	import { priceOf } from '$lib/pricing';
+
+	/** One writing call — what a direction list or a persona draft costs (audit ENH-003).
+	 *  These calls carry no persona yet, so they bill the clicker's own wallet. */
+	let writingCall = $derived(quote(priceOf('openrouter', 'llm')));
 	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
@@ -643,6 +648,7 @@
 							type="button"
 							class="dir-suggest-btn"
 							onclick={suggestDirections}
+							title="One writing call — {writingCall}, charged to your own wallet"
 							disabled={loadingIdeas || !data.brandBriefs?.length}
 							aria-busy={loadingIdeas}
 						>
@@ -660,7 +666,7 @@
 									d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"
 								/></svg
 							>
-							{loadingIdeas ? 'Thinking…' : 'Suggest directions from this brand'}
+							{loadingIdeas ? 'Thinking…' : `Suggest directions from this brand · ${writingCall}`}
 						</button>
 						{#if directionIdeas.length}
 							<div class="dir-chips">
@@ -682,6 +688,7 @@
 						type="button"
 						class="brand-gen-btn"
 						onclick={generatePersonaForBrand}
+						title="One writing call — {writingCall}, charged to your own wallet"
 						disabled={generatingPersona || !data.brandBriefs?.length}
 						aria-busy={generatingPersona}
 					>
@@ -702,7 +709,7 @@
 									d="M19 15l.7 1.8L21.5 18l-1.8.7L19 20.5l-.7-1.8L16.5 18l1.8-.7L19 15z"
 								/></svg
 							>
-							Generate persona for this brand
+							Generate persona for this brand · {writingCall}
 						{/if}
 					</button>
 					<p class="sr-only" role="status" aria-live="polite">
@@ -1262,6 +1269,7 @@
 					type="button"
 					class="randomize-btn"
 					onclick={generateVaultOptions}
+					title="One writing call for all three — {writingCall}, charged to your own wallet"
 					disabled={vaultLoading || !data.brandBriefs?.length}
 					aria-busy={vaultLoading}
 				>
@@ -1298,7 +1306,7 @@
 								d="M19 15l.7 1.8L21.5 18l-1.8.7L19 20.5l-.7-1.8L16.5 18l1.8-.7L19 15z"
 							/></svg
 						>
-						Generate 3 options
+						Generate 3 options · {writingCall}
 					{/if}
 				</button>
 			</div>
@@ -1308,6 +1316,7 @@
 					type="button"
 					class="dir-suggest-btn"
 					onclick={suggestDirections}
+					title="One writing call — {writingCall}, charged to your own wallet"
 					disabled={loadingIdeas || !data.brandBriefs?.length}
 					aria-busy={loadingIdeas}
 				>
@@ -1325,7 +1334,7 @@
 							d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"
 						/></svg
 					>
-					{loadingIdeas ? 'Thinking…' : 'Suggest directions'}
+					{loadingIdeas ? 'Thinking…' : `Suggest directions · ${writingCall}`}
 				</button>
 				{#if directionIdeas.length}
 					<div class="dir-chips">

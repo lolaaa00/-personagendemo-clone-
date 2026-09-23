@@ -3460,13 +3460,15 @@
 		<!-- ── Hero header ─────────────────────────────────────────── -->
 		<!-- Compact identity header — the banner image was removed on request:
 	     the character photo shows ONCE (avatar), not stretched behind the name. -->
+		<!-- Faded, not gone: the header holds the page's only h1 and four controls, and
+		     focus brings it back. aria-hidden while faded removed the h1 from the tree
+		     and left focusable controls hidden (round-9 re-audit, axe aria-hidden-focus). -->
 		<header
 			class="persona-hero"
 			bind:this={heroEl}
 			style="opacity: {1 - heroFade}; transform: translateY({(-heroFade * 16).toFixed(
 				1
 			)}px); pointer-events: {heroFade > 0.98 ? 'none' : 'auto'};"
-			aria-hidden={heroFade > 0.98}
 		>
 			<div class="hero-row">
 				{#if agent.ugc_character_ref}

@@ -289,8 +289,10 @@
 							<li>
 								<strong>{r.title.replace(/^Top-up request · /, '')}</strong>
 								{#if r.loaded}
-									<!-- Asserted from the ledger grant, never from the ticket. -->
-									— {r.amount} loaded {when(r.updated_at)};
+									<!-- Asserted from the ledger grant, never from the ticket. The pack's own USD
+							     price is in the title; a converted amount printed here read one minor unit
+							     off the pack card beside it (round-9 re-audit), so the ledger keeps that figure. -->
+									— loaded {when(r.updated_at)};
 									it is in the balance above.
 								{:else}
 									— closed {when(r.updated_at)} without loading credit. If you still need it, ask again below.

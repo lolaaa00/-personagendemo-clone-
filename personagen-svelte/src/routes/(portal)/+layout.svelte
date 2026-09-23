@@ -220,7 +220,15 @@
 				// where the reader was (re-audit: 1468 restored for 964).
 				// Tries again while the page fills in: WebKit at 320 laid out late and a
 				// single assignment left the reader at the top (round-8 re-audit).
+				// The reader may move before the page settles — a Tab, a wheel, a touch —
+				// and a retry that fired after that yanked them back and left focus
+				// off-screen (round-9 re-audit). Their first input ends the restore.
+				let cancelled = false;
+				const cancel = () => { cancelled = true; };
+				for (const t of ['wheel', 'keydown', 'pointerdown', 'touchstart']) window.addEventListener(t, cancel, { capture: true, once: true, passive: true });
+				setTimeout(() => { for (const t of ['wheel', 'keydown', 'pointerdown', 'touchstart']) window.removeEventListener(t, cancel, { capture: true }); }, 10000);
 				const restore = () => {
+					if (cancelled) return;
 					if (el.scrollHeight - el.clientHeight >= remembered) el.scrollTop = remembered;
 				};
 				requestAnimationFrame(() => requestAnimationFrame(restore));
@@ -231,6 +239,7 @@
 				// dashboard at 320 in WebKit could not hold the offset until then.
 				if (typeof ResizeObserver !== 'undefined') {
 					const ro = new ResizeObserver(() => {
+						if (cancelled) { ro.disconnect(); return; }
 						if (Math.abs(el.scrollTop - remembered) > 2) restore();
 						if (Math.abs(el.scrollTop - remembered) <= 2) ro.disconnect();
 					});
@@ -1195,12 +1204,14 @@
 							class:warn={wallet.balance > 0 && wallet.balance < 300 && !unmetered}
 							title={unmetered
 								? 'Complimentary account — generations are not charged'
-								: `${wallet.usd} of generation credit${wallet.currency !== 'USD' ? ` (shown in ${wallet.currency})` : ''}${wallet.paid_by ? ` — the ${wallet.paid_by} wallet, which pays for everything you generate here` : ''}`}
+								: `${wallet.usd} of generation credit${wallet.currency !== 'USD' ? ` (shown in ${wallet.currency})` : ''}${wallet.paid_by ? ` — the ${wallet.paid_by} wallet, which pays for what your personas generate here` : ' — your wallet, which pays for everything you generate here'}`}
 						>
 							<!-- A member spends from the workspace owner's wallet, so naming it
 							     is not decoration: an unlabelled shared balance is how someone
-							     concludes their own credits are being drained. -->
-							<span class="credit-pill-label">{wallet.label ?? wallet.paid_by ?? 'Balance'}</span>
+							     concludes their own credits are being drained. A solo account's pill
+							     says "Your wallet" for the same reason: "Balance" names no wallet at
+							     all (audit ENH-006). -->
+							<span class="credit-pill-label">{wallet.label ?? wallet.paid_by ?? 'Your wallet'}</span>
 							<span class="credit-pill-amount">{unmetered ? '∞' : wallet.formatted}</span>
 						</a>
 					{/if}
@@ -1215,8 +1226,8 @@
 					href={resolve('/(portal)/billing')}
 					class="credit-mini"
 					class:low={wallet.balance <= 0 && !unmetered}
-					aria-label="{wallet.label ?? wallet.paid_by ?? 'Balance'}: {unmetered ? 'complimentary' : wallet.formatted}"
-					title="{wallet.label ?? wallet.paid_by ?? 'Balance'}: {unmetered ? 'complimentary' : wallet.formatted}"
+					aria-label="{wallet.label ?? wallet.paid_by ?? 'Your wallet'}: {unmetered ? 'complimentary' : wallet.formatted}"
+					title="{wallet.label ?? wallet.paid_by ?? 'Your wallet'}: {unmetered ? 'complimentary' : wallet.formatted}"
 				>
 					{unmetered ? '∞' : wallet.compact}
 				</a>
