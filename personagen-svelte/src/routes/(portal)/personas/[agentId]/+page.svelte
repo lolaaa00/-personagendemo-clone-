@@ -2831,7 +2831,11 @@
 		if (!agent?.id) return;
 		publishFallbackPost = post;
 		publishFallbackReturnId = post?.id ?? null;
-		publishFallbackReturnEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		// The opener only when it is a control: after the /generations deep link
+		// the active element is <main>, and focus must go to the card instead.
+		const active = document.activeElement;
+		publishFallbackReturnEl =
+			active instanceof HTMLElement && !active.matches('body, main, [role="main"]') ? active : null;
 		publishFallbackOptions = [];
 		publishFallbackSelected = [];
 		publishFallbackLive = [];
@@ -4150,11 +4154,13 @@
 							<CalendarView
 								posts={calendarPosts}
 								onOpenPost={(p) => (modalPost = feedRowFor(p))}
-								onApprove={async (p) => {
-									const row = feedRowFor(p);
-									if (row) await handleApprovePost(row);
-								}}
-								onGenerateForDate={(d) => requestGeneratePost(d)}
+								onApprove={seat.canPublish
+									? async (p) => {
+											const row = feedRowFor(p);
+											if (row) await handleApprovePost(row);
+										}
+									: undefined}
+								onGenerateForDate={seatCanGenerate ? (d) => requestGeneratePost(d) : undefined}
 							/>
 						{/if}
 					{/if}

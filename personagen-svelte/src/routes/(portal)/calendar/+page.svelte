@@ -940,10 +940,11 @@
 			<button
 				class="btn-ghost"
 				onclick={openComposer}
-				disabled={data.agents.length === 0}
-				title={data.agents.length === 0
-					? 'Create a persona first — a post needs someone to post as'
-					: 'Write a post yourself — nothing is generated until you ask for it'}
+				disabled={data.agents.length === 0 || !!writeBlock}
+				title={writeBlock ??
+					(data.agents.length === 0
+						? 'Create a persona first — a post needs someone to post as'
+						: 'Write a post yourself — nothing is generated until you ask for it')}
 			>
 				<svg
 					width="16"
@@ -960,8 +961,8 @@
 			</button>
 			<button
 				class="btn-primary"
-				disabled={generatingPost || data.agents.length === 0}
-				title={data.agents.length === 0 ? 'Create a persona first — generation writes as one' : undefined}
+				disabled={generatingPost || data.agents.length === 0 || !!writeBlock}
+				title={writeBlock ?? (data.agents.length === 0 ? 'Create a persona first — generation writes as one' : undefined)}
 				onclick={() => requestGeneratePost()}
 				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-cta); border-color: transparent; white-space: nowrap;"
 			>
@@ -1191,6 +1192,10 @@
 		</p>
 	{/if}
 
+	{#if writeBlock}
+		<!-- Said once, up front, instead of a composer whose Approve is disabled. -->
+		<p class="cal-zone-note" role="status">{writeBlock}</p>
+	{/if}
 	<!-- A slot is a wall-clock time in its persona's own zone, not the
 	     viewer's. Say which, or "10:00" is ambiguous across zones (re-audit). -->
 	{#if calendarZones.length === 1}
@@ -1207,7 +1212,7 @@
 		bind:selectedAgentId
 		onOpenPost={(p) => (selectedPost = p as any)}
 		onApprove={approveBlock ? undefined : (p) => approvePost(p as any)}
-		onGenerateForDate={data.agents.length > 0 ? (d) => requestGeneratePost(d) : undefined}
+		onGenerateForDate={data.agents.length > 0 && !writeBlock ? (d) => requestGeneratePost(d) : undefined}
 	/>
 
 		<!-- Full post details: the same slide-in drawer the persona feed uses —

@@ -621,7 +621,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-23", hash: "73ad2e6", type: "fix", category: "fix", scope: "a11y", title: "no review filter wider than the strip minus its fade" },
 	{ date: "2026-09-23", hash: "19af1ac", type: "fix", category: "fix", scope: "a11y", title: "review strip clears its fade in Firefox too" },
 	{ date: "2026-09-23", hash: "51a88a8", type: "fix", category: "fix", scope: "a11y", title: "review strip scrolls the focused select into view after the browser's own focus scroll, instantly" },
-	{ date: "2026-09-23", hash: "074d9b4", type: "fix", category: "fix", scope: "a11y", title: "the review filter strip is a named, focusable scroll region in every engine" }
+	{ date: "2026-09-23", hash: "074d9b4", type: "fix", category: "fix", scope: "a11y", title: "the review filter strip is a named, focusable scroll region in every engine" },
+	{ date: "2026-09-23", hash: "680a160", type: "fix", category: "fix", scope: "audit", title: "round 7 — the Money, Access and Setup critics' lists" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1061,10 +1062,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "6ad7e09", from: "2026-09-23", to: "2026-09-23",
 		category: "fix", categories: ["fix"],
 		title: "Fixed: round 6 — the Setup and Access critics' lists",
-		summary: "Round 6 — the Setup and Access critics' lists. Plus 6 more changes.",
+		summary: "Round 6 — the Setup and Access critics' lists. Plus 7 more changes.",
 		major: true, curated: false,
-		entries: [CHANGELOG[581], CHANGELOG[582], CHANGELOG[583], CHANGELOG[584], CHANGELOG[585], CHANGELOG[586], CHANGELOG[587]]
+		entries: [CHANGELOG[581], CHANGELOG[582], CHANGELOG[583], CHANGELOG[584], CHANGELOG[585], CHANGELOG[586], CHANGELOG[587], CHANGELOG[588]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "074d9b4";
+export const CHANGELOG_GENERATED_FROM = "680a160";
