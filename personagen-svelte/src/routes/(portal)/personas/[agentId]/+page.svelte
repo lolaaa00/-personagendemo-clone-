@@ -2825,7 +2825,8 @@
 			// once its file input was disabled — mark it too.
 			for (const lab of rootEl.querySelectorAll<HTMLLabelElement>('label')) {
 				const ctl = lab.control as HTMLInputElement | null;
-				if (ctl?.disabled && !lab.hasAttribute('aria-disabled')) {
+				// (Svelte renders aria-disabled="false" on it already — test the value.)
+				if (ctl?.disabled && lab.getAttribute('aria-disabled') !== 'true') {
 					lab.setAttribute('aria-disabled', 'true');
 					lab.setAttribute('data-seat-disabled', '');
 					lab.setAttribute('tabindex', '-1');
@@ -2835,8 +2836,10 @@
 			}
 		};
 		apply();
+		// Attributes too: Svelte re-renders `disabled={…}` bindings back to
+		// enabled on any update, which re-armed the controls (round-8).
 		const mo = new MutationObserver(apply);
-		mo.observe(rootEl, { childList: true, subtree: true });
+		mo.observe(rootEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'aria-disabled'] });
 		return () => mo.disconnect();
 	});
 	/** Set when a connection attempt is refused for want of a Zernio key. */
