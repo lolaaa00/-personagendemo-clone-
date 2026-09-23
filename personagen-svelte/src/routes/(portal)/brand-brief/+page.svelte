@@ -3803,7 +3803,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	.enrich-btn.spin {
 		border-color: var(--cyan);
-		color: var(--cyan);
+		/* The AA text variant: raw cyan on its soft tint was 1.69:1 (round-4). */
+		color: var(--cyan-text);
 		background: var(--cyan-soft);
 	}
 	.enrich-btn.spin:hover:not(:disabled) {

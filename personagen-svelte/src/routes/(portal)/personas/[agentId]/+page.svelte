@@ -3522,6 +3522,7 @@
 							<span class="kit-price">· {kitPrice}</span>{/if}</button
 					>
 				{/if}
+				{#if kitLock}<span class="kit-lock-note">{kitLock}</span>{/if}
 				{#if ppConfirmedHandles[kitPlatform]}
 					<button
 						type="button"
@@ -6318,6 +6319,11 @@
 								>{computedMetrics.connectedCount} / {PLATFORMS.length}</span
 							>
 							<span class="conn-count-label">Active connections</span>
+							{#if !seat.canManageConnections}
+								<!-- Visible, not a tooltip: thirteen disabled buttons with the reason
+								     on hover told a creator nothing (round-4 re-audit). -->
+								<p class="conn-seat-note">{seatBlockedReason(seat, 'manager')}</p>
+							{/if}
 							<div class="conn-quick-links">
 								{#each PLATFORMS as p}
 									{#if !platformStatuses[p.key]?.connected}
@@ -6426,7 +6432,11 @@
 										/></svg
 									></span
 								>
-								<p>No platforms connected. Use the buttons above to link your first account.</p>
+								<p>
+									{seat.canManageConnections
+										? 'No platforms connected. Use the buttons above to link your first account.'
+										: `No platforms connected. ${seatBlockedReason(seat, 'manager')}`}
+								</p>
 							</div>
 						{:else}
 							<div class="platforms-grid">
@@ -7597,7 +7607,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		padding: 0.5rem 0 1rem;
+		/* Side padding: the chips touched the dialog's left edge (round-4 re-audit). */
+		padding: 0.5rem var(--space-4) 1rem;
 	}
 	.pubfb-chip {
 		border: 1px solid var(--border-strong);
@@ -7663,6 +7674,10 @@
 	/* ── Feed view toggle (Posts | Assets) ── */
 	.feed-view-toggle {
 		display: inline-flex;
+		/* Wraps at 320–375 instead of clipping "Cinematic" behind overflow:hidden
+		   (and WebKit scrolling the page sideways on focus) — round-4 re-audit. */
+		flex-wrap: wrap;
+		max-width: 100%;
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		overflow: hidden;
@@ -10699,6 +10714,11 @@
 	.kit-lock-note {
 		display: block;
 		margin: var(--space-1) 0 0;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+	.conn-seat-note {
+		margin: 0 0 var(--space-2);
 		font-size: var(--text-sm);
 		color: var(--text-muted);
 	}

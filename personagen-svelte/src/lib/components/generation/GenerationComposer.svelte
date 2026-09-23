@@ -33,6 +33,7 @@
 	 * the real charge.
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import { platformLabel } from '$lib/platforms';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import type { ComposerSpec } from './types';
@@ -480,7 +481,7 @@
 		if (autonomyLevel !== 'fully_autonomous')
 			return {
 				label: 'Approve & send to review',
-				hint: `Output: draft in the review queue — ${autonomyLevel ? `this persona is set to ${AUTONOMY_LABELS[autonomyLevel].label}, so it does not publish` : 'this persona does not publish'} on its own. Approve it in Review to post to ${selectablePlatforms.join(', ')}.`
+				hint: `Output: draft in the review queue — ${autonomyLevel ? `this persona is set to ${AUTONOMY_LABELS[autonomyLevel].label}, so it does not publish` : 'this persona does not publish'} on its own. Approve it in Review to post to ${selectablePlatforms.map((p) => platformLabel(p)).join(', ')}.`
 			};
 		return {
 			label: 'Approve & publish now',

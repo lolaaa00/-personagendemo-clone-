@@ -706,7 +706,7 @@
 											{/if}
 											<div class="event-content">
 												{#if failureKind(post)}
-													<span class="event-fail">{failureKind(post) === 'generation' ? 'Gen failed' : post.status === 'partial' ? 'Partly failed' : 'Publish failed'}</span>
+													<span class="event-fail">{failureKind(post) === 'generation' ? 'Gen failed' : post.status === 'partial' ? 'Partly published' : 'Publish failed'}</span>
 												{/if}
 												<span class="sr-only">{statusWords(post)}</span>
 												<span class="event-agent">
@@ -762,7 +762,7 @@
 								<span class="mobile-post-agent">{post.agentName}</span>
 								<div class="mobile-post-platforms">
 									{#each post.platforms as p}
-										<span class="platform-tag" class:ink={platformColor(p) === '#000000'} style="color: {platformColor(p)}">{p}</span>
+										<span class="platform-tag" style="--brand: {platformColor(p)}">{p}</span>
 									{/each}
 								</div>
 							</div>
@@ -870,7 +870,7 @@
 								<div class="day-post-foot">
 									<div class="day-post-platforms">
 										{#each post.platforms as p}
-											<span class="platform-tag" class:ink={platformColor(p) === '#000000'} style="color: {platformColor(p)}">{p}</span>
+											<span class="platform-tag" style="--brand: {platformColor(p)}">{p}</span>
 										{/each}
 									</div>
 									{#if a && (a.views || a.likes || a.comments)}
@@ -2021,6 +2021,11 @@
 		font-size: var(--text-xs);
 		font-weight: var(--weight-semi);
 		text-transform: capitalize;
+		/* The brand colour is a MARKER; the name is in the text colour. Brand
+		   colours as 10px text failed AA for six of eight platforms (round-4). */
+		color: var(--text);
+		border-left: 3px solid var(--brand, var(--border-strong));
+		padding-left: 4px;
 	}
 
 	/* ── Day modal ── */
@@ -2458,10 +2463,5 @@
 			gap: 0.5rem;
 			padding: 0.5rem;
 		}
-	}
-	/* X and Threads brand black is invisible on the dark theme (re-audit): an
-	   ink-coloured brand takes the text colour, which is legible in both. */
-	.platform-tag.ink {
-		color: var(--text) !important;
 	}
 </style>

@@ -21,6 +21,7 @@
 	let sentEl = $state<HTMLElement | null>(null);
 	let helpState = $state<'idle' | 'sending' | 'sent' | 'error'>('idle');
 	let helpMessage = $state('');
+	let helpEl = $state<HTMLElement | null>(null);
 	async function askForHelp() {
 		helpState = 'sending';
 		try {
@@ -36,6 +37,10 @@
 			helpMessage = 'Could not reach the server. Check your connection and try again.';
 			helpState = 'error';
 		}
+		// The button that was pressed is gone; focus the answer, or focus falls
+		// to <body> and a screen reader hears nothing (round-4 re-audit).
+		await tick();
+		helpEl?.focus();
 	}
 
 	async function submit(e: SubmitEvent) {
@@ -90,7 +95,7 @@
 				you replace the first time you sign in.
 			</p>
 			{#if helpState === 'sent' || helpState === 'error'}
-				<p class="reset-sent" role="status">{helpMessage}</p>
+				<p class="reset-sent" role="status" tabindex="-1" bind:this={helpEl}>{helpMessage}</p>
 			{/if}
 			{#if helpState !== 'sent'}
 				<button class="reset-btn reset-btn-secondary" type="button" onclick={askForHelp} disabled={helpState === 'sending'}>

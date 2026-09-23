@@ -980,7 +980,7 @@
 			     600 to 1200px. Not rendered at all for an account with no personas, so an
 			     empty list reserves no space. -->
 			{#if sidebarAgents.length > 0}
-			<div class="sidebar-persona-rows">
+			<div class="sidebar-persona-rows" class:has-more={navMoreBelow && !sidebarState.collapsed}>
 			{#if sidebarState.collapsed}
 				<!-- Icon rail: groups add nothing at 28px wide — flat list. -->
 				{#each filteredSidebarAgents as agent (agent.id)}
@@ -1756,6 +1756,9 @@
 		gap: 2px;
 		flex: 1 1 auto;
 		min-height: 0;
+		/* Room under the last visible row for the sticky cue, so it never sits
+		   on a persona's name (1366x657: the only visible row — round-4). */
+		scroll-padding-bottom: 34px;
 		overflow-y: auto;
 		overflow-x: hidden;
 		overscroll-behavior: contain;
@@ -2805,5 +2808,9 @@
 	/* Under $3.00: amber, before the wall, the nudge to top up while a run still fits. */
 	.credit-pill.warn .credit-pill-amount {
 		color: var(--warning-text);
+	}
+	.sidebar-persona-rows.has-more::after {
+		content: '';
+		flex: 0 0 30px;
 	}
 </style>

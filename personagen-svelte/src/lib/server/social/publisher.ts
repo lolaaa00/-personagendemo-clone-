@@ -171,7 +171,7 @@ export async function publishToPlatform({
 			success: false,
 			provider: 'zernio',
 			error:
-				'No Zernio API key available for this persona. Add one in Settings → API Keys or fix its assignment in the Zernio Key Manager.'
+				'No Zernio API key is set for this persona. The workspace owner adds one in Settings → Provider API Keys (Zernio), or assigns one in the Zernio Key Manager.'
 		};
 	}
 

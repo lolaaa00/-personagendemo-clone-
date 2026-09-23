@@ -912,8 +912,8 @@
 			],
 			steps: [
 				{ t: 'Open the post — the exact reason is written on it, per platform.' },
-				{ t: 'Most common: the account needs re-linking. Persona’s Profile → Connections — a Reconnect badge marks the broken account; one click and a login fixes it.' },
-				{ t: 'Then approve/retry the post. Posts that failed for a temporary reason (network hiccup) retry themselves automatically.' }
+				{ t: 'Most common: the account needs re-linking. Persona’s Profile → Connections (a Manager seat or above) — reconnect the account there.' },
+				{ t: 'Then open the post and use “Publish to a connected platform” to send it again to the platforms that failed. Posts that failed for a temporary reason (network hiccup) retry themselves automatically.' }
 			],
 			tip: 'A Partial label on a multi-platform post means some platforms succeeded — only the listed ones failed.'
 		},
@@ -1068,9 +1068,14 @@
 			// so every "What went wrong?" / "Where do I get a key?" link opened on
 			// the list with the answer below the fold (round-2 re-audit). The
 			// article's scroll-margin keeps its title clear of the sticky header.
-			void tick().then(() =>
-				document.getElementById('guide-article')?.scrollIntoView({ block: 'start' })
-			);
+			// Once is not enough: desktop Firefox lands 343–673px past the title
+			// (the page above the article settles after the first scroll — round-4
+			// re-audit). Re-land after paint, after fonts, and after a short settle.
+			const land = () => document.getElementById('guide-article')?.scrollIntoView({ block: 'start' });
+			void tick().then(land);
+			requestAnimationFrame(() => requestAnimationFrame(land));
+			document.fonts?.ready.then(land).catch(() => {});
+			setTimeout(land, 400);
 		}
 	});
 
@@ -3182,5 +3187,12 @@
 		.gd-article {
 			scroll-margin-top: var(--space-4);
 		}
+	}
+	/* Four docs tabs did not fit a 320px phone: "User Voice" was 3% visible
+	   inside an overflow:hidden pill (round-4 re-audit). Scroll, never clip. */
+	.gd-docs-nav {
+		max-width: 100%;
+		overflow-x: auto;
+		scrollbar-width: thin;
 	}
 </style>

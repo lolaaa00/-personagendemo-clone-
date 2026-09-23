@@ -205,7 +205,7 @@
 			</div>
 			<h5>No Channels Connected Yet</h5>
 			<p>
-				Link one or more social media channels above. Once connected, audience reach and engagement
+				Once a social media channel is connected, audience reach and engagement
 				rates will instantly calculate and sync.
 			</p>
 		</div>

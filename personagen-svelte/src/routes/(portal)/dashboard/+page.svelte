@@ -324,7 +324,9 @@
 		background: var(--surface-2);
 	}
 	.setup-step.done {
-		opacity: 0.68;
+		/* Dimmed by colour, not opacity: 0.68 took the text to 3.83:1 and the
+		   "Done" mark to 2.79:1 (round-4 re-audit). */
+		color: var(--text-muted);
 	}
 	.setup-mark {
 		flex: none;
@@ -584,5 +586,8 @@
 		color: var(--text-dim);
 		max-width: 16rem;
 		text-align: right;
+	}
+	.setup-step.done .setup-mark {
+		color: var(--success-text);
 	}
 </style>

@@ -314,7 +314,7 @@
 
 <div class="dash-table-wrap">
 	<div class="dash-table-header">
-		<h3>Your Personas</h3>
+		<h2>Your Personas</h2>
 		<!-- A group of pressed-state buttons. It was role="tablist" with no tabpanel
 		     and no arrow keys — the same fake tablist the Admin page dropped. -->
 		<div class="dash-table-filters" role="group" aria-label="Filter personas">
@@ -360,6 +360,9 @@
 	<div class="dash-table" role="table" aria-label="Persona roster" tabindex="-1" bind:this={rosterEl}>
 		<div class="dash-row row-header" class:no-spend={!hasSpend} role="row">
 			<span class="pick-cell" role="columnheader">
+				<!-- Always named: in card mode the checkbox is visibility:hidden and
+				     axe reported an empty table header (round-4 re-audit). -->
+				<span class="sr-only">Select</span>
 				{#if !deleteBlocked}
 					<input
 						type="checkbox"
@@ -432,7 +435,7 @@
 					</div>
 					<div class="dash-agent-info">
 						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
-							<a class="dash-agent-link" href="/personas/{agent.id}">{agent.name}</a>
+							<a class="dash-agent-link" href="/personas/{agent.id}" title={agent.name}>{agent.name}</a>
 							{#if agent.is_overseer}
 								<!-- Gradient darkened: the original mint/cyan pair carried white 9px
 								     text at ~2.5:1. These stops clear 4.5:1 in both themes. -->
@@ -602,7 +605,7 @@
 		gap: 0.75rem;
 	}
 
-	.dash-table-header h3 {
+	.dash-table-header h2 {
 		font-size: 0.95rem;
 		font-weight: 600;
 	}

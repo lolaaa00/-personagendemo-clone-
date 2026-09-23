@@ -1866,6 +1866,15 @@
 	.filter-row .filter-bar {
 		flex: 1 1 auto;
 		min-width: 0;
+		/* Exactly the row's width, whatever the row's alignment: at 320–414 the
+		   strip measured 560px inside a 256px row and <main> clipped it, so the
+		   Persona and Platform filters were off-screen (round-4 re-audit). */
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+	.filt-why {
+		max-width: 100%;
 	}
 	.filt-count {
 		margin-left: auto;

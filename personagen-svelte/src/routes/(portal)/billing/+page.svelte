@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { confirmAction } from '$lib/stores/confirm.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import { plural } from '$lib/plural';
@@ -119,6 +119,10 @@
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
 			requestedPack = packId;
 			await invalidateAll();
+			// The list re-renders; put focus back on the button that was pressed
+			// rather than letting it fall to <main> (round-4 re-audit).
+			await tick();
+			document.querySelector<HTMLElement>(`[data-pack="${packId}"]`)?.focus();
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -318,6 +322,7 @@
 								class="buy ghost"
 								disabled={requesting !== null}
 								aria-describedby="topup-note"
+								data-pack={p.id}
 								onclick={() => requestTopup(p.id)}
 							>
 								{requesting === p.id

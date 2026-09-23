@@ -580,7 +580,8 @@
 		<section class="admin-card">
 			<div class="platform-head">
 				<div>
-					<h2>Platform controls</h2>
+					<!-- Focusable: closeRequest() lands here after a request is handled. -->
+					<h2 tabindex="-1">Platform controls</h2>
 					<p class="admin-hint">
 						These switches live in the database and take effect on every server within 15 seconds — no
 						environment change, no redeploy. An environment variable of the same name, if set on the host,
@@ -1592,7 +1593,8 @@
 		font-size: 0.7rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		opacity: 0.55;
+		/* A dim colour that still clears AA — opacity 0.55 measured 3.91:1. */
+		color: var(--text-muted);
 		margin: 0.9rem 0 0.35rem;
 	}
 	.platform-tab-item {
@@ -1803,5 +1805,14 @@
 		border-radius: 10px;
 		background: rgba(255, 255, 255, 0.03);
 		border: 1px solid rgba(255, 255, 255, 0.1);
+	}
+	/* 320px: the Controls tab overflowed by 9px (hint text + currency select). */
+	.admin-card {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.admin-card select,
+	.admin-card .admin-input {
+		max-width: 100%;
 	}
 </style>

@@ -678,7 +678,7 @@
 				<span
 					class="drawer-status-badge"
 					style="color: {statusColor(post.status)}; border-color: {statusColor(post.status)}"
-					>{post.status}</span
+					>{post.status === 'partial' ? 'Partly published' : post.status}</span
 				>
 				{#each post.platforms ?? [] as p (p)}
 					<span class="drawer-platform-pill" style="background: {platformColor(p)}">{p}</span>
@@ -928,7 +928,7 @@
 					>
 					<p>{getPostErrorSummary(post) ?? 'The platform did not say why.'}</p>
 					<div class="drawer-error-actions">
-						{#if !onPublishFallback && post.status === 'failed' && post.agent_id}
+						{#if !onPublishFallback && (post.status === 'failed' || post.status === 'partial') && post.agent_id}
 							<!-- /generations and the calendar offered only the guide and Trash
 							     while the guide said to publish again. The persona page owns the
 							     platform picker; this opens it there. -->
