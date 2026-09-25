@@ -636,7 +636,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-25", hash: "f09cd43", type: "fix", category: "fix", scope: "docs", title: "the format explorer fits its column on 1366px laptops; cover note for the client response" },
 	{ date: "2026-09-25", hash: "2ec73c1", type: "docs", category: "docs", scope: "audit", title: "client response PDF (25 Sep), cover note; the 23 Sep draft is marked superseded" },
 	{ date: "2026-09-25", hash: "af06feb", type: "other", category: "maintenance", scope: null, title: "verify-reset-email — proves GoTrue reset delivery end to end (GoTrue /recover + Resend delivery status)" },
-	{ date: "2026-09-25", hash: "8d7e2c0", type: "other", category: "infrastructure", scope: null, title: "panel-gotrue-smtp — set GoTrue SMTP on the Supabase compose service and deploy the app via EasyPanel's official MCP" }
+	{ date: "2026-09-25", hash: "8d7e2c0", type: "other", category: "infrastructure", scope: null, title: "panel-gotrue-smtp — set GoTrue SMTP on the Supabase compose service and deploy the app via EasyPanel's official MCP" },
+	{ date: "2026-09-25", hash: "ae8ad56", type: "other", category: "maintenance", scope: null, title: "GoTrue sender defaults to noreply@l2gseo.com — the domain verified in Resend" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1084,10 +1085,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "45a0086", from: "2026-09-23", to: "2026-09-25",
 		category: "fix", categories: ["fix","design","docs","maintenance","infrastructure"],
 		title: "Fixed: hide the file-picker label outright for read-only…",
-		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 7 more changes, touching layout, colours and readability and guides and explanations and internal cleanup.",
+		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 8 more changes, touching layout, colours and readability and guides and explanations and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598], CHANGELOG[599], CHANGELOG[600], CHANGELOG[601], CHANGELOG[602]]
+		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598], CHANGELOG[599], CHANGELOG[600], CHANGELOG[601], CHANGELOG[602], CHANGELOG[603]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "8d7e2c0";
+export const CHANGELOG_GENERATED_FROM = "ae8ad56";

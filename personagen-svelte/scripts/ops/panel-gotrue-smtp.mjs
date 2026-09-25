@@ -21,14 +21,19 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const PROJECT = flag('--project', 'l2g');
 const SENDER = flag('--sender', 'noreply@l2gseo.com'); // l2gseo.com is the domain verified in Resend (2026-09-25); monarchstack.com is not
 const DEPLOY_APP = flag('--deploy-app', '');
-const SMTP = {
-	GOTRUE_SMTP_HOST: process.env.SMTP_HOST || 'smtp.resend.com',
-	GOTRUE_SMTP_PORT: process.env.SMTP_PORT || '465',
-	GOTRUE_SMTP_USER: process.env.SMTP_USER || 'resend',
-	GOTRUE_SMTP_PASS: SMTP_PASS,
-	GOTRUE_SMTP_ADMIN_EMAIL: SENDER,
-	GOTRUE_SMTP_SENDER_NAME: process.env.SMTP_SENDER_NAME || 'PersonaGen'
+// The Supabase compose template feeds the auth container by interpolation
+// (GOTRUE_SMTP_HOST: ${SMTP_HOST} …), so the UN-prefixed keys are the ones that
+// count; a raw GOTRUE_SMTP_* line in the panel env never reaches GoTrue
+// (2026-09-25: "Error sending recovery email" until SMTP_* were set). Both forms are written.
+const base = {
+	SMTP_HOST: process.env.SMTP_HOST || 'smtp.resend.com',
+	SMTP_PORT: process.env.SMTP_PORT || '465',
+	SMTP_USER: process.env.SMTP_USER || 'resend',
+	SMTP_PASS: SMTP_PASS,
+	SMTP_ADMIN_EMAIL: SENDER,
+	SMTP_SENDER_NAME: process.env.SMTP_SENDER_NAME || 'PersonaGen'
 };
+const SMTP = { ...base, ...Object.fromEntries(Object.entries(base).map(([k, v]) => ['GOTRUE_' + k, v])) };
 if (!PANEL_KEY || !SMTP_PASS) {
 	console.error('PANEL_KEY and SMTP_PASS are required (env). See the header for usage.');
 	process.exit(2);
@@ -81,9 +86,9 @@ console.log(`Supabase service: ${supa.name} (${supa.type || 'compose'}), env lin
 
 // 3. merge
 const lines = (supa.env || '').split('\n');
-const keep = lines.filter((l) => !/^GOTRUE_SMTP_(HOST|PORT|USER|PASS|ADMIN_EMAIL|SENDER_NAME)=/.test(l));
+const keep = lines.filter((l) => !/^(GOTRUE_)?SMTP_(HOST|PORT|USER|PASS|ADMIN_EMAIL|SENDER_NAME)=/.test(l));
 const merged = [...keep.filter((l, i, a) => !(l === '' && i === a.length - 1)), ...Object.entries(SMTP).map(([k, v]) => `${k}=${v}`)].join('\n') + '\n';
-const before = lines.filter((l) => /^GOTRUE_SMTP_/.test(l)).map((l) => l.replace(/=(.+)$/, (m, v) => '=' + (/PASS/.test(l) ? '***' : v)));
+const before = lines.filter((l) => /^(GOTRUE_)?SMTP_/.test(l)).map((l) => l.replace(/=(.+)$/, (m, v) => '=' + (/PASS/.test(l) ? '***' : v)));
 console.log('existing GOTRUE_SMTP_* lines:', before.length ? before : '(none)');
 console.log('will set:', Object.entries(SMTP).map(([k, v]) => `${k}=${k.endsWith('PASS') ? '***' : v}`).join('  '));
 if (DRY) { console.log('dry run — nothing written'); process.exit(0); }
