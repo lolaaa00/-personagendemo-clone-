@@ -2882,4 +2882,11 @@
 		font-size: 0;
 		gap: 0;
 	}
+	/* Persona gradients are picked for hue, not for text: white initials on the
+	   cyan stop measured 1.8:1 (round-9 re-audit). A dark inset wash sits above
+	   the gradient and under the glyph, so every hue clears 4.5:1; a photo
+	   avatar is left alone. */
+	.sidebar-persona-avatar:not(:has(img)) {
+		box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.45);
+	}
 </style>

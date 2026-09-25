@@ -263,9 +263,13 @@
 		color: var(--text-dim);
 		font-size: var(--text-xs);
 	}
-	@media (max-width: 640px) {
+	/* Container, not viewport: see DocsDemo .demo-body. */
+	@container (max-width: 560px) {
 		.kr-controls {
 			grid-template-columns: 1fr;
+		}
+		.kr-stage-payer {
+			white-space: normal;
 		}
 	}
 </style>

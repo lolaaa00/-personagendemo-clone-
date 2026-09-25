@@ -2863,7 +2863,7 @@
 		width: 56px;
 		height: 56px;
 		border-radius: var(--radius-md);
-		background: var(--gradient);
+		background: var(--gradient-cta); /* built for white text; the raw gradient read 1.85:1 (round-9) */
 		display: flex;
 		align-items: center;
 		justify-content: center;

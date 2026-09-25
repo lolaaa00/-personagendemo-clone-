@@ -214,7 +214,8 @@
 		font-weight: 600;
 		color: var(--accent-text);
 	}
-	@media (max-width: 640px) {
+	/* Container, not viewport: see DocsDemo .demo-body. */
+	@container (max-width: 560px) {
 		.sm {
 			grid-template-columns: 1fr;
 		}

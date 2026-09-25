@@ -223,6 +223,22 @@ export interface FormatOptions {
 }
 
 /** Localised money string: 2 000 credits, AUD → "A$28.00"; JPY → "¥3,000". */
+/** Regions whose own currency is also written "$": a US-dollar figure shown there
+ *  needs "US$" or it reads as local money (round-9 re-audit: "$10.00 ≈ $9.400"
+ *  on Billing in es-CL). Dollarised regions (EC, SV, PA…) are not listed: there
+ *  the local dollar IS the US dollar. */
+const DOLLAR_REGIONS = new Set(['MX', 'CL', 'AR', 'CO', 'UY', 'AU', 'NZ', 'CA', 'SG', 'HK', 'TW', 'DO', 'JM', 'TT', 'BB', 'BS', 'BZ', 'FJ', 'GY', 'SR', 'NA', 'LR', 'KY', 'BM', 'BN', 'CU', 'SB', 'TV', 'KI', 'NR']);
+
+export function dollarCollides(locale?: string): boolean {
+	if (!locale) return false;
+	try {
+		const region = new Intl.Locale(locale).maximize().region;
+		return !!region && DOLLAR_REGIONS.has(region);
+	} catch {
+		return false;
+	}
+}
+
 export function formatMoney(
 	amount: number,
 	currency: string,
@@ -240,13 +256,14 @@ export function formatMoney(
 	}
 	if (zeroDecimal) value = roundHalfAway(amount);
 	try {
-		return new Intl.NumberFormat(locale || undefined, {
+		const out = new Intl.NumberFormat(locale || undefined, {
 			style: 'currency',
 			currency,
 			currencyDisplay: 'narrowSymbol',
 			minimumFractionDigits: fraction,
 			maximumFractionDigits: fraction
 		}).format(value);
+		return currency.toUpperCase() === 'USD' && dollarCollides(locale) ? out.replace('$', 'US$') : out;
 	} catch {
 		return `${currency} ${value.toFixed(fraction)}`;
 	}

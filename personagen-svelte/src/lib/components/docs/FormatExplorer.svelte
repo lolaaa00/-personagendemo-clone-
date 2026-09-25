@@ -218,7 +218,7 @@
 	}
 	.fx-stage {
 		display: grid;
-		grid-template-columns: 1.6rem 1fr auto auto;
+		grid-template-columns: 1.6rem minmax(0, 1fr) auto auto; /* minmax(0): a 1fr track's floor is min-content, which pushed the row 4–15px past the figure at 1366 (round-9) */
 		align-items: center;
 		gap: 0.6rem;
 		padding: 0.5rem 0.65rem;
@@ -304,12 +304,14 @@
 		color: var(--text-dim);
 		font-size: var(--text-xs);
 	}
-	@media (max-width: 640px) {
+	/* Container, not viewport: see DocsDemo .demo-body. */
+	@container (max-width: 560px) {
 		.fx-stage {
-			grid-template-columns: 1.6rem 1fr auto;
+			grid-template-columns: 1.6rem minmax(0, 1fr) auto;
 		}
 		.fx-payer {
 			grid-column: 2;
+			white-space: normal;
 		}
 	}
 </style>

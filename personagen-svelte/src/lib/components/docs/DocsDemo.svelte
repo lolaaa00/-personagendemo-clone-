@@ -62,6 +62,10 @@
 	}
 	.demo-body {
 		padding: 0.9rem;
+		/* The demos query THIS width, not the viewport: the docs article column is
+		   ~360px on a 1366px laptop while the viewport is far above any phone
+		   breakpoint (round-9 re-audit: labels spilled 23–89px past the figure). */
+		container-type: inline-size;
 	}
 	@media (max-width: 640px) {
 		.demo-hint {

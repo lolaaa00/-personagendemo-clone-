@@ -1246,6 +1246,11 @@
 
 	.event-fail {
 		display: block;
+		/* One line, ellipsized: "Partly published" ran past a 29px month cell at 1024 (round-9). */
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -2490,5 +2495,34 @@
 	.event-main:focus-visible {
 		outline: 2px solid var(--focus-ring);
 		outline-offset: -2px;
+	}
+	/* Week chips can be a few dozen pixels wide (seven columns at 768px, a 44px
+	   thumbnail inside): their time and persona name spilled past the box
+	   (round-8/9 re-audit). The text ellipsizes; below 110px the thumbnail goes
+	   so the words get the room; below 40px only the accessible name remains
+	   and the title carries the details. */
+	.event-block {
+		container-type: inline-size;
+	}
+	.event-main {
+		container-type: inline-size;
+	}
+	.event-time,
+	.event-agent,
+	.event-agent > * {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	@container (max-width: 110px) {
+		.event-thumb {
+			display: none;
+		}
+	}
+	@container (max-width: 40px) {
+		.event-main > :not(.sr-only) {
+			display: none;
+		}
 	}
 </style>

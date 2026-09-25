@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { getServiceSupabase } from '$lib/server/service-supabase';
 import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import { byokReason, isByokGated, providerById } from '$lib/providers';
 import type { RequestHandler } from './$types';
@@ -97,11 +98,20 @@ async function testProviderKey(provider: UserKeyProvider, apiKey: string) {
 	return { status: 'error' as const, error: 'Unsupported provider' };
 }
 
+/** Every access to user_api_keys goes through the service role, filtered by the
+ *  signed-in user's id. Secret reads moved to the service role on 2026-09-17
+ *  (c7674db) and SELECT was revoked from `authenticated` — which also broke the
+ *  user-client upsert/update/select here with "permission denied for table
+ *  user_api_keys": saving ANY provider key failed in production until this
+ *  (found by the client audit's own checklist, round 9). The route still
+ *  authenticates first; the service client only ever sees `user.id` rows. */
+const keys = () => getServiceSupabase();
+
 export const GET: RequestHandler = async ({ locals }) => {
 	const user = await requireUser(locals);
 	if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-	const { data, error } = await locals.supabase
+	const { data, error } = await keys()
 		.from('user_api_keys')
 		.select('provider, masked_value, status, last_error, last_tested_at, updated_at')
 		.eq('user_id', user.id)
@@ -158,7 +168,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const encrypted = encryptSecret(apiKey);
 			const masked = maskApiKey(apiKey);
-			const { data, error } = await locals.supabase
+			const { data, error } = await keys()
 				.from('user_api_keys')
 				.upsert(
 					{
@@ -184,7 +194,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (!apiKey) return json({ success: false, error: 'No saved key for this provider.' }, { status: 404 });
 
 			const result = await testProviderKey(provider, apiKey);
-			const { data, error } = await locals.supabase
+			const { data, error } = await keys()
 				.from('user_api_keys')
 				.update({
 					status: result.status,
@@ -221,7 +231,7 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: 'Unsupported provider' }, { status: 400 });
 	}
 
-	const { error } = await locals.supabase
+	const { error } = await keys()
 		.from('user_api_keys')
 		.delete()
 		.eq('user_id', user.id)

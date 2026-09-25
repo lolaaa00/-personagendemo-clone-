@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	formatMoney,
 	currencyForCountry,
 	currencyForAcceptLanguage,
 	resolveDisplayCurrency,
@@ -42,6 +43,15 @@ describe('money — currency resolution', () => {
 });
 
 describe('money — conversion and formatting', () => {
+	it('marks US dollars as US$ where the local currency also writes "$" (round-9)', () => {
+		expect(formatMoney(79, 'USD', 'es-MX')).toBe('US$79.00');
+		expect(formatMoney(10, 'USD', 'es-CL')).toBe('US$10.00');
+		expect(formatMoney(61.34, 'MXN', 'es-MX', { whole: false })).toBe('$61.34');
+		expect(formatMoney(79, 'USD', 'en-US')).toBe('$79.00');
+		expect(formatMoney(79, 'USD', 'en-PH')).toBe('$79.00');
+		expect(formatMoney(79, 'USD')).toBe('$79.00');
+	});
+
 	it('2 000 credits = $20.00 in USD regardless of rates', () => {
 		expect(creditsToAmount(2000, 'USD', FALLBACK_FX)).toBe(20);
 		expect(formatCredits(2000, 'USD', FALLBACK_FX, 'en-US')).toBe('$20.00');

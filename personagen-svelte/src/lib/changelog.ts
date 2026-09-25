@@ -630,7 +630,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-23", hash: "6b72e8c", type: "fix", category: "fix", scope: "audit", title: "round 8 follow-ups — Back restore re-applies as the page grows; file-picker label hidden for read-only seats" },
 	{ date: "2026-09-23", hash: "a304445", type: "fix", category: "fix", scope: "audit", title: "the read-only Profile tab holds through Svelte re-renders and hides the file-picker label" },
 	{ date: "2026-09-23", hash: "45a0086", type: "fix", category: "fix", scope: "audit", title: "hide the file-picker label outright for read-only seats (its own display beat hidden)" },
-	{ date: "2026-09-23", hash: "6f1030b", type: "fix", category: "design", scope: "audit", title: "key list counts only wired providers (UX-003); Kelvin response letter" }
+	{ date: "2026-09-23", hash: "6f1030b", type: "fix", category: "design", scope: "audit", title: "key list counts only wired providers (UX-003); Kelvin response letter" },
+	{ date: "2026-09-23", hash: "5e945b5", type: "fix", category: "fix", scope: "audit", title: "round 9 — price + payer on every paid button; Back restore stops at first input; pill names a solo wallet" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1078,10 +1079,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "45a0086", from: "2026-09-23", to: "2026-09-23",
 		category: "fix", categories: ["fix","design"],
 		title: "Fixed: hide the file-picker label outright for read-only…",
-		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 1 more change, touching layout, colours and readability.",
+		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 2 more changes, touching layout, colours and readability.",
 		major: false, curated: false,
-		entries: [CHANGELOG[595], CHANGELOG[596]]
+		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "6f1030b";
+export const CHANGELOG_GENERATED_FROM = "5e945b5";
