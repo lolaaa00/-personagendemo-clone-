@@ -638,7 +638,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-25", hash: "af06feb", type: "other", category: "maintenance", scope: null, title: "verify-reset-email — proves GoTrue reset delivery end to end (GoTrue /recover + Resend delivery status)" },
 	{ date: "2026-09-25", hash: "8d7e2c0", type: "other", category: "infrastructure", scope: null, title: "panel-gotrue-smtp — set GoTrue SMTP on the Supabase compose service and deploy the app via EasyPanel's official MCP" },
 	{ date: "2026-09-25", hash: "ae8ad56", type: "other", category: "maintenance", scope: null, title: "GoTrue sender defaults to noreply@l2gseo.com — the domain verified in Resend" },
-	{ date: "2026-09-25", hash: "f762f15", type: "other", category: "maintenance", scope: null, title: "the Supabase compose template reads SMTP_* (interpolated into GOTRUE_SMTP_*); write both forms" }
+	{ date: "2026-09-25", hash: "f762f15", type: "other", category: "maintenance", scope: null, title: "the Supabase compose template reads SMTP_* (interpolated into GOTRUE_SMTP_*); write both forms" },
+	{ date: "2026-09-25", hash: "5e35024", type: "feat", category: "security", scope: "auth", title: "the app sends password-reset emails itself (Resend API + recovery token hash)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1084,12 +1085,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "45a0086", from: "2026-09-23", to: "2026-09-25",
-		category: "fix", categories: ["fix","design","docs","maintenance","infrastructure"],
+		category: "fix", categories: ["fix","design","docs","maintenance","infrastructure","security"],
 		title: "Fixed: hide the file-picker label outright for read-only…",
-		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 9 more changes, touching layout, colours and readability and guides and explanations and internal cleanup.",
+		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 10 more changes, touching layout, colours and readability and guides and explanations and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598], CHANGELOG[599], CHANGELOG[600], CHANGELOG[601], CHANGELOG[602], CHANGELOG[603], CHANGELOG[604]]
+		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598], CHANGELOG[599], CHANGELOG[600], CHANGELOG[601], CHANGELOG[602], CHANGELOG[603], CHANGELOG[604], CHANGELOG[605]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f762f15";
+export const CHANGELOG_GENERATED_FROM = "5e35024";
