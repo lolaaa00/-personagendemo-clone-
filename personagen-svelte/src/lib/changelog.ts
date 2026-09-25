@@ -634,7 +634,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-23", hash: "5e945b5", type: "fix", category: "fix", scope: "audit", title: "round 9 — price + payer on every paid button; Back restore stops at first input; pill names a solo wallet" },
 	{ date: "2026-09-25", hash: "87707cb", type: "fix", category: "fix", scope: "audit", title: "saving a provider key works again; the last four cosmetic leftovers" },
 	{ date: "2026-09-25", hash: "f09cd43", type: "fix", category: "fix", scope: "docs", title: "the format explorer fits its column on 1366px laptops; cover note for the client response" },
-	{ date: "2026-09-25", hash: "2ec73c1", type: "docs", category: "docs", scope: "audit", title: "client response PDF (25 Sep), cover note; the 23 Sep draft is marked superseded" }
+	{ date: "2026-09-25", hash: "2ec73c1", type: "docs", category: "docs", scope: "audit", title: "client response PDF (25 Sep), cover note; the 23 Sep draft is marked superseded" },
+	{ date: "2026-09-25", hash: "af06feb", type: "other", category: "maintenance", scope: null, title: "verify-reset-email — proves GoTrue reset delivery end to end (GoTrue /recover + Resend delivery status)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1080,12 +1081,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "45a0086", from: "2026-09-23", to: "2026-09-25",
-		category: "fix", categories: ["fix","design","docs"],
+		category: "fix", categories: ["fix","design","docs","maintenance"],
 		title: "Fixed: hide the file-picker label outright for read-only…",
-		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 5 more changes, touching layout, colours and readability and guides and explanations.",
+		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 6 more changes, touching layout, colours and readability and guides and explanations and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598], CHANGELOG[599], CHANGELOG[600]]
+		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598], CHANGELOG[599], CHANGELOG[600], CHANGELOG[601]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "2ec73c1";
+export const CHANGELOG_GENERATED_FROM = "af06feb";
