@@ -13,6 +13,7 @@
 	 */
 	let email = $state('');
 	import { tick } from 'svelte';
+	import { page } from '$app/stores';
 
 	let sending = $state(false);
 	let sent = $state(false);
@@ -22,6 +23,8 @@
 	let helpState = $state<'idle' | 'sending' | 'sent' | 'error'>('idle');
 	let helpMessage = $state('');
 	let helpEl = $state<HTMLElement | null>(null);
+	/** A reset link that was already used, or has expired (/api/auth/recover sends the reader back here). */
+	let expired = $derived($page.url.searchParams.get('error') === 'expired');
 	async function askForHelp() {
 		helpState = 'sending';
 		try {
@@ -107,7 +110,10 @@
 			<p class="reset-lead">
 				Enter the address you sign in with and we'll email you a link to set a new password.
 			</p>
-
+
+			{#if expired}
+				<p class="reset-error" role="alert">That reset link has already been used or has expired. Ask for a new one below.</p>
+			{/if}
 			<form onsubmit={submit} novalidate>
 				{#if error}
 					<p class="reset-error" id="reset-error" role="alert">{error}</p>

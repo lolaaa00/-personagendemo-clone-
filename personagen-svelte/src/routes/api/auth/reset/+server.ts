@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { resetMailConfigured, sendResetMail } from '$lib/server/reset-mail';
 
 /**
  * Send a password-recovery email.
@@ -36,6 +37,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	const redirectTo = `${url.origin}/api/auth/callback?next=${encodeURIComponent(
 		'/settings?section=profile&reset=1#password'
 	)}`;
+
+	// The app sends the email itself when it can (Resend key configured): the
+	// production auth container cannot be given SMTP settings through the panel
+	// (see $lib/server/reset-mail). GoTrue's own mailer remains the fallback.
+	if (resetMailConfigured()) {
+		try {
+			await sendResetMail(email, url.origin);
+		} catch (e) {
+			console.error('[auth/reset] app-sent reset mail failed:', (e as Error).message);
+		}
+		return sameAnswer;
+	}
 
 	const { error } = await locals.supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
