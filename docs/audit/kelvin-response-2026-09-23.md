@@ -1,4 +1,6 @@
-# Response to Kelvin's QA audit — 23 September 2026
+# Response to Kelvin's QA audit — 23 September 2026 (draft; superseded)
+
+> **Superseded on 25 September 2026** by `PersonaGen - Response to QA Audit - Kelvin - 2026-09-25.pdf` in this folder (built from the published artifact). That version has all 34 checklist lines ticked, no "still open" items, nothing asked of the client, and records the key-save bug the checklist caught.
 
 **Audience:** Kelvin (client). Plain language, for reading in one sitting.
 **Covers:** the audit dated 21 September 2026 (28 numbered items; 34-line regression checklist).

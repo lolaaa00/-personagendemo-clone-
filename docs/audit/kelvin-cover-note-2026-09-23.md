@@ -24,7 +24,7 @@ Nothing is needed from you to use the product. When you want to publish, the Doc
 
 **Release**
 
-RELEASE_LINE
+Every change in the PDF is committed, built and verified; the code is on the main branch as of 25 September 2026 and reaches honeyx.monarchstack.com with the production deploy that follows this note.
 
 If anything in the PDF does not match what you see, reply with the item's ID (for example UX-005) and we will show you exactly what changed and where.
 
