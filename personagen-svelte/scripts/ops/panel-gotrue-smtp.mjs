@@ -19,7 +19,7 @@ const PANEL_URL = (process.env.PANEL_URL || 'https://zi1cc5.easypanel.host').rep
 const PANEL_KEY = process.env.PANEL_KEY || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const PROJECT = flag('--project', 'l2g');
-const SENDER = flag('--sender', 'noreply@monarchstack.com');
+const SENDER = flag('--sender', 'noreply@l2gseo.com'); // l2gseo.com is the domain verified in Resend (2026-09-25); monarchstack.com is not
 const DEPLOY_APP = flag('--deploy-app', '');
 const SMTP = {
 	GOTRUE_SMTP_HOST: process.env.SMTP_HOST || 'smtp.resend.com',
