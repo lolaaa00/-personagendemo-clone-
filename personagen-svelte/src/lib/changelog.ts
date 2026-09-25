@@ -631,7 +631,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-23", hash: "a304445", type: "fix", category: "fix", scope: "audit", title: "the read-only Profile tab holds through Svelte re-renders and hides the file-picker label" },
 	{ date: "2026-09-23", hash: "45a0086", type: "fix", category: "fix", scope: "audit", title: "hide the file-picker label outright for read-only seats (its own display beat hidden)" },
 	{ date: "2026-09-23", hash: "6f1030b", type: "fix", category: "design", scope: "audit", title: "key list counts only wired providers (UX-003); Kelvin response letter" },
-	{ date: "2026-09-23", hash: "5e945b5", type: "fix", category: "fix", scope: "audit", title: "round 9 — price + payer on every paid button; Back restore stops at first input; pill names a solo wallet" }
+	{ date: "2026-09-23", hash: "5e945b5", type: "fix", category: "fix", scope: "audit", title: "round 9 — price + payer on every paid button; Back restore stops at first input; pill names a solo wallet" },
+	{ date: "2026-09-25", hash: "87707cb", type: "fix", category: "fix", scope: "audit", title: "saving a provider key works again; the last four cosmetic leftovers" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1076,13 +1077,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[581], CHANGELOG[582], CHANGELOG[583], CHANGELOG[584], CHANGELOG[585], CHANGELOG[586], CHANGELOG[587], CHANGELOG[588], CHANGELOG[589], CHANGELOG[590], CHANGELOG[591], CHANGELOG[592], CHANGELOG[593], CHANGELOG[594]]
 	},
 	{
-		id: "45a0086", from: "2026-09-23", to: "2026-09-23",
+		id: "45a0086", from: "2026-09-23", to: "2026-09-25",
 		category: "fix", categories: ["fix","design"],
 		title: "Fixed: hide the file-picker label outright for read-only…",
-		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 2 more changes, touching layout, colours and readability.",
+		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden). Plus 3 more changes, touching layout, colours and readability.",
 		major: false, curated: false,
-		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597]]
+		entries: [CHANGELOG[595], CHANGELOG[596], CHANGELOG[597], CHANGELOG[598]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "5e945b5";
+export const CHANGELOG_GENERATED_FROM = "87707cb";

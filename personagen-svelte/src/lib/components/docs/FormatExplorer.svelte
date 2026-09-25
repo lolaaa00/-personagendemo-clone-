@@ -146,6 +146,9 @@
 <style>
 	.fx {
 		display: grid;
+		/* An implicit auto track sizes to max-content and outgrew the ~270px article
+		   column on a 1366 laptop by 30px (round-9): the one track is bounded. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.75rem;
 	}
 	.fx-picker {
@@ -214,10 +217,12 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.35rem;
 	}
 	.fx-stage {
 		display: grid;
+		min-width: 0;
 		grid-template-columns: 1.6rem minmax(0, 1fr) auto auto; /* minmax(0): a 1fr track's floor is min-content, which pushed the row 4–15px past the figure at 1366 (round-9) */
 		align-items: center;
 		gap: 0.6rem;
@@ -277,6 +282,8 @@
 	}
 	.fx-total {
 		display: flex;
+		flex-wrap: wrap; /* the total and its figure stack rather than spill (5px at 1366, round-9) */
+		min-width: 0;
 		justify-content: space-between;
 		align-items: baseline;
 		gap: 1rem;
@@ -297,7 +304,7 @@
 	.fx-total-usd {
 		font-family: var(--font-mono);
 		font-weight: 700;
-		white-space: nowrap;
+		white-space: normal;
 	}
 	.fx-fine {
 		margin: 0;
