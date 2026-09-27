@@ -1,6 +1,6 @@
-# Cover note to Kelvin — 25 September 2026
+# Cover note to Kelvin — 27 September 2026
 
-**Audience:** Kelvin (client). To be sent as the email body, with `PersonaGen - Response to QA Audit - Kelvin - 2026-09-25.pdf` attached.
+**Audience:** Kelvin (client). To be sent as the email body, with `PersonaGen - Response to QA Audit - Kelvin - 2026-09-27.pdf` attached.
 
 ---
 
@@ -24,7 +24,7 @@ Nothing is needed from you to use the product. When you want to publish, the Doc
 
 **Release**
 
-Every change in the PDF is committed, built and verified; the code is on the main branch as of 25 September 2026 and reaches honeyx.monarchstack.com with the production deploy that follows this note.
+Everything in the PDF is live at honeyx.monarchstack.com now — the audit fixes since 25 September, and password-reset emails (sent from noreply@l2gseo.com, verified end to end) since 27 September. Nothing is pending on our side.
 
 If anything in the PDF does not match what you see, reply with the item's ID (for example UX-005) and we will show you exactly what changed and where.
 
