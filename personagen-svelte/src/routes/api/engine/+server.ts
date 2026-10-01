@@ -48,9 +48,14 @@ import { getPath, type Obj } from '$lib/persona-contract/paths';
 import { rerollField, rerollGroupFor, rerollableGroupKeys } from '$lib/server/persona/reroll';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import { buildIdentityKitPrompt } from '$lib/server/identity-kit-prompt';
-import { resolvePublicIps } from '$lib/server/safe-fetch';
+import { resolvePublicIps, safeFetchWithRedirects } from '$lib/server/safe-fetch';
 import { personaGenerator } from '$lib/server/flags';
-import { applyProseOnly, proseOnlyPrompt, skeletonFor, toV1Response } from '$lib/server/persona/generate-v2';
+import {
+	applyProseOnly,
+	proseOnlyPrompt,
+	skeletonFor,
+	toV1Response
+} from '$lib/server/persona/generate-v2';
 
 /**
  * The `appearance` JSON contract handed to the persona-generation prompts, derived
@@ -293,7 +298,9 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	// Only a persona this caller can read (RLS) is ever named — never a
 	// client-supplied id taken on trust.
 	const claimedAgentId =
-		typeof (body.agentId ?? body.agent_id) === 'string' ? String(body.agentId ?? body.agent_id) : '';
+		typeof (body.agentId ?? body.agent_id) === 'string'
+			? String(body.agentId ?? body.agent_id)
+			: '';
 	let meterAgentId: string | undefined;
 	if (/^[0-9a-f-]{36}$/i.test(claimedAgentId)) {
 		const { data: visible } = await locals.supabase
@@ -303,7 +310,12 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 			.maybeSingle();
 		meterAgentId = visible?.id ?? undefined;
 	}
-	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), { supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId, stage: `engine:${String(action ?? 'unknown')}` });
+	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), {
+		supabase: locals.supabase,
+		userId: session.user.id,
+		agentId: meterAgentId,
+		stage: `engine:${String(action ?? 'unknown')}`
+	});
 	const hasAi = !!ai;
 
 	console.log(
@@ -503,7 +515,8 @@ Platform: ${bp.platform || platform}
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -536,7 +549,15 @@ Platform: ${bp.platform || platform}
 				// Gate the WHOLE batch up front at retail (text + still per copy), so a
 				// thin wallet is refused before the first paid call instead of after copy 7.
 				try {
-					await assertWithinBudget(locals.supabase, session.user.id, meterAgentId, creditsFor(count * (meteringPriceOf('openrouter', 'llm') + meteringPriceOf('fal', 'image', 'nano'))));
+					await assertWithinBudget(
+						locals.supabase,
+						session.user.id,
+						meterAgentId,
+						creditsFor(
+							count *
+								(meteringPriceOf('openrouter', 'llm') + meteringPriceOf('fal', 'image', 'nano'))
+						)
+					);
 				} catch (gateErr) {
 					const refusal = meteringRefusal(gateErr);
 					return json(refusal.body, { status: refusal.status });
@@ -545,7 +566,11 @@ Platform: ${bp.platform || platform}
 
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
+						{
+							success: false,
+							error:
+								'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.'
+						},
 						{ status: 500 }
 					);
 				}
@@ -556,7 +581,10 @@ Platform: ${bp.platform || platform}
 				// Resolve image providers once for the whole batch — same per-user
 				// key resolution the rest of the pipeline uses (user's saved
 				// OpenRouter/fal keys first, env keys as the fallback).
-				const { orKey, falKey, orRoutes } = await resolveImageKeys(locals.supabase, session.user.id);
+				const { orKey, falKey, orRoutes } = await resolveImageKeys(
+					locals.supabase,
+					session.user.id
+				);
 				if (!orKey && !falKey) {
 					return json(
 						{
@@ -611,10 +639,28 @@ Output ONLY the JSON.`;
 									{ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId },
 									// Positional defaults kept explicit so the registry-resolved t2i route
 									// lands in the trailing slot without changing model/aspect/people.
-									() => generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey, undefined, '3:4', true, orRoutes.t2i),
+									() =>
+										generateUgcImage(
+											parsed.ugc_broll_prompt,
+											orKey,
+											falKey,
+											undefined,
+											'3:4',
+											true,
+											orRoutes.t2i
+										),
 									{
 										estimateUsd: meteringPriceOf('fal', 'image', 'nano'),
-										event: (r) => ({ provider: r.provider, operation: 'image', model: r.model, usd: meteringPriceOf(r.provider, 'image', r.provider === 'fal' ? 'nano' : undefined) })
+										event: (r) => ({
+											provider: r.provider,
+											operation: 'image',
+											model: r.model,
+											usd: meteringPriceOf(
+												r.provider,
+												'image',
+												r.provider === 'fal' ? 'nano' : undefined
+											)
+										})
 									}
 								);
 								// Archive it now. With a service key, a persist failure throws →
@@ -891,7 +937,8 @@ Return a JSON object with:
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -933,7 +980,8 @@ Return JSON: { "type": "script", "platform": "${platform}", "content": "formatte
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -971,7 +1019,8 @@ Return JSON: { "type": "titles", "platform": "${platform}", "titles": [string x 
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -1073,7 +1122,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					success: false,
 					error: hasAi
 						? 'AI returned an empty response — try again.'
-						: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+						: "Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 				},
 				{ status: hasAi ? 502 : 400 }
 			);
@@ -1120,10 +1169,9 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					const { data: mine } = await db.brandBriefs.list(session.user.id);
 					if ((mine?.length ?? 0) >= ent.brandBriefLimit) {
 						const n = ent.brandBriefLimit;
-						return json(
-							planRefusal(`More than ${n} brand brief${n === 1 ? '' : 's'}`, ent.plan),
-							{ status: 403 }
-						);
+						return json(planRefusal(`More than ${n} brand brief${n === 1 ? '' : 's'}`, ent.plan), {
+							status: 403
+						});
 					}
 				}
 
@@ -1176,15 +1224,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					locations: Array.isArray(answers.locations) ? answers.locations : []
 				});
 
-				const { error: saveErr } = await db.brandBriefs.updateById(
-					existing.id,
-					session.user.id,
-					{
-						data: { ...briefData, contentStrategy: strategy },
-						name: existing.name,
-						version: (existing.version || 0) + 1
-					}
-				);
+				const { error: saveErr } = await db.brandBriefs.updateById(existing.id, session.user.id, {
+					data: { ...briefData, contentStrategy: strategy },
+					name: existing.name,
+					version: (existing.version || 0) + 1
+				});
 				if (saveErr) {
 					console.error('[Engine] Failed to save content strategy:', saveErr);
 					// The strategy is still valid — hand it back and say it is unsaved
@@ -1310,21 +1354,34 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							for (let attempt = 0; attempt < 2 && !contentToParse; attempt++) {
 								if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
 								try {
-									const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
-										method: 'POST',
-										headers: {
-											'Content-Type': 'application/json',
-											Authorization: `Bearer ${firecrawlKey}`
-										},
-										body: JSON.stringify({
-											url: storeUrl,
-											// Full data spectrum: markdown for copy, links for product
-											// discovery, and keep nav/footer (onlyMainContent:false) so the
-											// logo in the header is visible to the extractor.
-											formats: ['markdown', 'links', 'rawHtml', 'branding'],
-											onlyMainContent: false
-										})
-									}), { estimateUsd: meteringPriceOf('firecrawl', 'scrape'), event: () => ({ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape store', usd: meteringPriceOf('firecrawl', 'scrape') }) });
+									const fcRes = await meteredCall(
+										{ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId },
+										() =>
+											fetch('https://api.firecrawl.dev/v1/scrape', {
+												method: 'POST',
+												headers: {
+													'Content-Type': 'application/json',
+													Authorization: `Bearer ${firecrawlKey}`
+												},
+												body: JSON.stringify({
+													url: storeUrl,
+													// Full data spectrum: markdown for copy, links for product
+													// discovery, and keep nav/footer (onlyMainContent:false) so the
+													// logo in the header is visible to the extractor.
+													formats: ['markdown', 'links', 'rawHtml', 'branding'],
+													onlyMainContent: false
+												})
+											}),
+										{
+											estimateUsd: meteringPriceOf('firecrawl', 'scrape'),
+											event: () => ({
+												provider: 'firecrawl',
+												operation: 'scrape',
+												model: 'v1/scrape store',
+												usd: meteringPriceOf('firecrawl', 'scrape')
+											})
+										}
+									);
 									if (fcRes.ok) {
 										const fcJson = await fcRes.json();
 										if (fcJson.success && fcJson.data?.markdown) {
@@ -1423,24 +1480,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								await assertPublicHttpUrl(storeUrl);
 								// Follow redirects manually so a public URL that 3xx's to an
 								// internal address can't bypass the check above.
-								let nextUrl = storeUrl;
-								let response: Response | null = null;
-								for (let hop = 0; hop < 5; hop++) {
-									const res = await fetch(nextUrl, {
-										redirect: 'manual',
-										headers: {
-											'User-Agent':
-												'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-										}
-									});
-									if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-										nextUrl = new URL(res.headers.get('location')!, nextUrl).toString();
-										await assertPublicHttpUrl(nextUrl);
-										continue;
+								const response = await safeFetchWithRedirects(storeUrl, {
+									headers: {
+										'User-Agent':
+											'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 									}
-									response = res;
-									break;
-								}
+								});
 								if (response?.ok) {
 									const html = await response.text();
 									harvestFonts(html.slice(0, 300000));
@@ -1542,7 +1587,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							};
 							let catalogProducts: CatalogProduct[] = [];
 							try {
-								const catRes = await fetch(
+								const catRes = await safeFetchWithRedirects(
 									new URL('/products.json?limit=30', storeUrl).toString(),
 									{
 										headers: {
@@ -1599,18 +1644,35 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											// Firecrawl first, when configured…
 											if (firecrawlKey && !firecrawlKey.includes('placeholder')) {
 												try {
-													const r = await meteredCall({ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
-														method: 'POST',
-														headers: {
-															'Content-Type': 'application/json',
-															Authorization: `Bearer ${firecrawlKey}`
+													const r = await meteredCall(
+														{
+															supabase: locals.supabase,
+															userId: session.user.id,
+															agentId: meterAgentId
 														},
-														body: JSON.stringify({
-															url: link,
-															formats: ['markdown'],
-															onlyMainContent: true
-														})
-													}), { estimateUsd: meteringPriceOf('firecrawl', 'scrape'), event: () => ({ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape product page', usd: meteringPriceOf('firecrawl', 'scrape') }) });
+														() =>
+															fetch('https://api.firecrawl.dev/v1/scrape', {
+																method: 'POST',
+																headers: {
+																	'Content-Type': 'application/json',
+																	Authorization: `Bearer ${firecrawlKey}`
+																},
+																body: JSON.stringify({
+																	url: link,
+																	formats: ['markdown'],
+																	onlyMainContent: true
+																})
+															}),
+														{
+															estimateUsd: meteringPriceOf('firecrawl', 'scrape'),
+															event: () => ({
+																provider: 'firecrawl',
+																operation: 'scrape',
+																model: 'v1/scrape product page',
+																usd: meteringPriceOf('firecrawl', 'scrape')
+															})
+														}
+													);
 													if (r.ok) {
 														const rj = await r.json();
 														// A throttled product page must not pollute the
@@ -1642,8 +1704,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											// crawler but serves plain server fetches fine — the same
 											// story as the homepage. No redirect following (the URL was
 											// SSRF-validated; a redirect could escape that check).
-											const res = await fetch(link, {
-												redirect: 'manual',
+											const res = await safeFetchWithRedirects(link, {
 												headers: {
 													'User-Agent':
 														'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -1843,7 +1904,11 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 				if (!/^https?:\/\//i.test(productUrl)) productUrl = `https://${productUrl}`;
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
+						{
+							success: false,
+							error:
+								'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -1861,18 +1926,31 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 					const imageCandidates: string[] = [];
 
 					if (fcKey && !fcKey.includes('placeholder') && fcKey.trim() !== '') {
-						const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
-							method: 'POST',
-							headers: {
-								'Content-Type': 'application/json',
-								Authorization: `Bearer ${fcKey}`
-							},
-							body: JSON.stringify({
-								url: productUrl,
-								formats: ['markdown'],
-								onlyMainContent: false
-							})
-						}), { estimateUsd: meteringPriceOf('firecrawl', 'scrape'), event: () => ({ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape product', usd: meteringPriceOf('firecrawl', 'scrape') }) });
+						const fcRes = await meteredCall(
+							{ supabase: locals.supabase, userId: session.user.id, agentId: meterAgentId },
+							() =>
+								fetch('https://api.firecrawl.dev/v1/scrape', {
+									method: 'POST',
+									headers: {
+										'Content-Type': 'application/json',
+										Authorization: `Bearer ${fcKey}`
+									},
+									body: JSON.stringify({
+										url: productUrl,
+										formats: ['markdown'],
+										onlyMainContent: false
+									})
+								}),
+							{
+								estimateUsd: meteringPriceOf('firecrawl', 'scrape'),
+								event: () => ({
+									provider: 'firecrawl',
+									operation: 'scrape',
+									model: 'v1/scrape product',
+									usd: meteringPriceOf('firecrawl', 'scrape')
+								})
+							}
+						);
 						if (fcRes.ok) {
 							const fcJson = (await fcRes.json()) as any;
 							if (fcJson.success && fcJson.data?.markdown) {
@@ -1978,7 +2056,8 @@ ${pageContent}`,
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -2112,7 +2191,8 @@ Input: "${fieldVal}"`;
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -2264,12 +2344,15 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
 
 				const fieldPath = typeof body.fieldPath === 'string' ? body.fieldPath.trim() : '';
-				if (!fieldPath) return json({ success: false, error: 'Missing fieldPath' }, { status: 400 });
+				if (!fieldPath)
+					return json({ success: false, error: 'Missing fieldPath' }, { status: 400 });
 
 				// A caller that omits the nonce gets a fresh draw each press, which is
 				// what a button wants; one that supplies it gets a reproducible result.
 				const nonce =
-					typeof body.nonce === 'string' || typeof body.nonce === 'number' ? body.nonce : Date.now();
+					typeof body.nonce === 'string' || typeof body.nonce === 'number'
+						? body.nonce
+						: Date.now();
 
 				const { data: agent } = await db.agents.get(agentId);
 				if (!agent || agent.user_id !== session.user.id) {
@@ -2325,7 +2408,8 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -2479,7 +2563,8 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -2633,7 +2718,8 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -2716,7 +2802,8 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
+							error:
+								"Writing is unavailable on our side right now — the platform's AI provider is not configured. This isn't your account, and nothing was charged — try again later."
 						},
 						{ status: 400 }
 					);
@@ -2769,7 +2856,11 @@ Return ONLY JSON: ${APPEARANCE_JSON_SKELETON}`;
 
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
+						{
+							success: false,
+							error:
+								'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -2813,7 +2904,11 @@ Output ONLY the generated text for this field — no explanation, no label, no q
 				}
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
+						{
+							success: false,
+							error:
+								'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.'
+						},
 						{ status: 400 }
 					);
 				}

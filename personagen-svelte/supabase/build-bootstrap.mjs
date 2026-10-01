@@ -102,6 +102,6 @@ for (const [i, [file, note]] of ORDER.entries()) {
 	parts.push(banner(i + 1, file, note), makeReRunnable(raw).trim(), '');
 }
 
-const sql = parts.join('\n') + '\n';
+const sql = parts.join('\n').trimEnd() + '\n';
 writeFileSync(join(here, 'client_bootstrap.sql'), sql, 'utf8');
 console.log(`client_bootstrap.sql written — ${ORDER.length} migrations, ${sql.split('\n').length} lines`);

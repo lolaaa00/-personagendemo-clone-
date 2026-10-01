@@ -1,9 +1,8 @@
-/** The granter itself. signup-guard.spec mocks this module; nothing here does. */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./service-supabase', () => ({
 	getServiceSupabase: () => {
-		throw new Error('no service key in tests');
+		throw new Error('no service key');
 	}
 }));
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
@@ -11,35 +10,23 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 const { grantWelcomeCredit } = await import('./welcome-guard');
 const settings = await import('./settings');
 
-function client(recentGrants: number) {
-	const calls: Array<Record<string, unknown>> = [];
-	return {
-		calls,
-		rpc: async (_fn: string, args: Record<string, unknown>) => {
-			calls.push(args);
-			return { data: null, error: null };
-		},
-		from: () => ({
-			select: () => ({
-				eq: function () {
-					return this;
-				},
-				like: function () {
-					return this;
-				},
-				gte: async () => ({ count: recentGrants, error: null })
-			})
-		})
-	};
-}
-
-async function prime(rows: Array<{ key: string; value: unknown }>) {
+async function prime(credits = 1000, cap = 20, logging = false) {
 	settings._resetSettingsForTests();
 	settings._setSettingsClientFactory(
 		() =>
 			({
 				rpc: async () => ({ data: null, error: null }),
-				from: () => ({ select: async () => ({ data: rows.map((r) => ({ ...r, updated_at: 't' })), error: null }) })
+				from: () => ({
+					select: async () => ({
+						data: [
+							{ key: 'signup_credits', value: credits, updated_at: 't' },
+							{ key: 'signup_credits_hourly_cap', value: cap, updated_at: 't' },
+							{ key: 'activity_log', value: logging, updated_at: 't' },
+							{ key: 'activity_pepper', value: 'p'.repeat(40), updated_at: 't' }
+						],
+						error: null
+					})
+				})
 			}) as never
 	);
 	await settings.refreshSettings();
@@ -47,65 +34,56 @@ async function prime(rows: Array<{ key: string; value: unknown }>) {
 
 beforeEach(() => settings._resetSettingsForTests());
 
-describe('welcome grant', () => {
-	it('grants the configured amount with the shared idempotency key', async () => {
-		await prime([{ key: 'signup_credits', value: 1000 }, { key: 'signup_credits_hourly_cap', value: 20 }]);
-		const c = client(3);
-		expect(await grantWelcomeCredit('u1', c as never)).toBe('granted');
-		expect(c.calls[0]).toMatchObject({
-			p_user: 'u1',
-			p_delta: 1000,
-			p_kind: 'grant',
-			p_stripe_event: 'welcome:u1',
-			p_allow_negative: false
-		});
-		// maybeWithholdWelcome finds the grant by this prefix; changing it would
-		// silently disable the per-address clawback.
-		expect(String(c.calls[0].p_note)).toMatch(/^welcome/);
-	});
-
-	it('withholds at the hourly cap instead of granting', async () => {
-		await prime([{ key: 'signup_credits', value: 1000 }, { key: 'signup_credits_hourly_cap', value: 20 }]);
-		const c = client(20);
-		expect(await grantWelcomeCredit('u1', c as never)).toBe('capped');
-		expect(c.calls).toHaveLength(0);
-	});
-
-	it('an unlimited cap never withholds', async () => {
-		await prime([{ key: 'signup_credits', value: 1000 }, { key: 'signup_credits_hourly_cap', value: 0 }]);
-		const c = client(9999);
-		expect(await grantWelcomeCredit('u1', c as never)).toBe('granted');
-	});
-
-	it('grants nothing when signup credit is switched off', async () => {
-		await prime([{ key: 'signup_credits', value: 0 }]);
-		const c = client(0);
-		expect(await grantWelcomeCredit('u1', c as never)).toBe('off');
-		expect(c.calls).toHaveLength(0);
-	});
-
-	it('a duplicate is success, not failure — the trigger may have won the race', async () => {
-		await prime([{ key: 'signup_credits', value: 1000 }, { key: 'signup_credits_hourly_cap', value: 0 }]);
-		const c = {
-			rpc: async () => ({ data: null, error: { code: '23505', message: 'duplicate key value' } }),
-			from: () => ({ select: () => ({ eq() { return this; }, like() { return this; }, gte: async () => ({ count: 0 }) }) })
+describe('atomic welcome grant', () => {
+	it('sends eligibility, cap, and grant through one database operation', async () => {
+		await prime();
+		const calls: Array<[string, Record<string, unknown>]> = [];
+		const client = {
+			rpc: async (fn: string, args: Record<string, unknown>) => {
+				calls.push([fn, args]);
+				return { data: 'granted', error: null };
+			}
 		};
-		expect(await grantWelcomeCredit('u1', c as never)).toBe('granted');
+		expect(await grantWelcomeCredit('u1', '203.0.113.7', client)).toBe('granted');
+		expect(calls).toHaveLength(1);
+		expect(calls[0][0]).toBe('signup_credit_grant_atomic');
+		expect(calls[0][1]).toMatchObject({ p_user: 'u1', p_credits: 1000, p_hourly_cap: 20 });
+		expect(String(calls[0][1].p_address_hash)).toHaveLength(64);
 	});
 
-	it('never throws into the signup path', async () => {
-		await prime([{ key: 'signup_credits', value: 1000 }]);
-		const c = {
-			rpc: async () => {
-				throw new Error('database on fire');
-			},
-			from: () => ({ select: () => ({ eq() { return this; }, like() { return this; }, gte: async () => ({ count: 0 }) }) })
+	it('works when optional activity logging is disabled', async () => {
+		await prime(1000, 20, false);
+		const client = { rpc: async () => ({ data: 'granted', error: null }) };
+		expect(await grantWelcomeCredit('u1', '203.0.113.7', client)).toBe('granted');
+	});
+
+	it.each([
+		['capped', 'capped'],
+		['address_ineligible', 'ineligible'],
+		['duplicate', 'granted']
+	] as const)('maps database result %s', async (dbResult, expected) => {
+		await prime();
+		const client = { rpc: async () => ({ data: dbResult, error: null }) };
+		expect(await grantWelcomeCredit('u1', '203.0.113.7', client)).toBe(expected);
+	});
+
+	it('fails closed on a database failure', async () => {
+		await prime();
+		const client = {
+			rpc: async () => ({ data: null, error: { message: 'database unavailable' } })
 		};
-		expect(await grantWelcomeCredit('u1', c as never)).toBe('failed');
+		expect(await grantWelcomeCredit('u1', '203.0.113.7', client)).toBe('failed');
 	});
 
-	it('does nothing without a user id', async () => {
-		await prime([{ key: 'signup_credits', value: 1000 }]);
-		expect(await grantWelcomeCredit('', client(0) as never)).toBe('off');
+	it('fails closed without a trusted address or hashing pepper', async () => {
+		await prime();
+		const client = { rpc: vi.fn() };
+		expect(await grantWelcomeCredit('u1', null, client)).toBe('failed');
+		expect(client.rpc).not.toHaveBeenCalled();
+	});
+
+	it('grants nothing when signup credit is off', async () => {
+		await prime(0);
+		expect(await grantWelcomeCredit('u1', '203.0.113.7', { rpc: vi.fn() })).toBe('off');
 	});
 });

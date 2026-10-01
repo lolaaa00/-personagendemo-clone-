@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PLAN_FALLBACK } from './plans';
-import { entitlementsFromRow, atLeast, planRank, UNRESTRICTED, type Entitlements } from './entitlements';
+import {
+	entitlementsFromRow,
+	atLeast,
+	planRank,
+	UNRESTRICTED,
+	type Entitlements
+} from './entitlements';
 
-const src = (...p: string[]) => readFileSync(new URL(`../../${p.join('/')}`, import.meta.url), 'utf-8');
+const src = (...p: string[]) =>
+	readFileSync(new URL(`../../${p.join('/')}`, import.meta.url), 'utf-8');
 const ent = (plan: string): Entitlements =>
 	entitlementsFromRow(PLAN_FALLBACK.find((p) => p.plan === plan) ?? null, plan);
 
@@ -17,24 +24,68 @@ const PROMISES: Array<{
 	gate?: { file: string[]; needle: string };
 	universal?: string;
 }> = [
-	{ match: /personas?$/, gate: { file: ['routes', 'api', 'agents', '+server.ts'], needle: 'personaLimitExceeded' } },
-	{ match: /month of media generation included/, gate: { file: ['routes', 'api', 'billing', 'webhook', '+server.ts'], needle: 'includedResetClawback' } },
-	{ match: /brand briefs?$/, gate: { file: ['routes', 'api', 'engine', '+server.ts'], needle: 'brandBriefLimit' } },
-	{ match: /Advisor \+ Semi-autonomous|All three autonomy levels/, gate: { file: ['routes', 'api', 'agents', 'config', '+server.ts'], needle: 'maxAutonomy' } },
-	{ match: /Standard video \+ lip-sync|Cinematic multi-shot \+ talking head/, gate: { file: ['routes', 'api', 'agent', '[agentId]', 'generate-post', '+server.ts'], needle: 'ent.cinematic' } },
-	{ match: /Priority generation queue/, gate: { file: ['lib', 'server', 'autopilot.ts'], needle: 'orderByPlanPriority' } },
-	{ match: /Teams \+ shared workspaces/, gate: { file: ['routes', 'api', 'workspaces', '+server.ts'], needle: 'ent.teams' } },
+	{
+		match: /personas?$/,
+		gate: { file: ['routes', 'api', 'agents', '+server.ts'], needle: 'personaLimitExceeded' }
+	},
+	{
+		match: /month of media generation included/,
+		gate: {
+			file: ['routes', 'api', 'billing', 'webhook', '+server.ts'],
+			needle: 'subscription_renewal_atomic'
+		}
+	},
+	{
+		match: /brand briefs?$/,
+		gate: { file: ['routes', 'api', 'engine', '+server.ts'], needle: 'brandBriefLimit' }
+	},
+	{
+		match: /Advisor \+ Semi-autonomous|All three autonomy levels/,
+		gate: { file: ['routes', 'api', 'agents', 'config', '+server.ts'], needle: 'maxAutonomy' }
+	},
+	{
+		match: /Standard video \+ lip-sync|Cinematic multi-shot \+ talking head/,
+		gate: {
+			file: ['routes', 'api', 'agent', '[agentId]', 'generate-post', '+server.ts'],
+			needle: 'ent.cinematic'
+		}
+	},
+	{
+		match: /Priority generation queue/,
+		gate: { file: ['lib', 'server', 'autopilot.ts'], needle: 'orderByPlanPriority' }
+	},
+	{
+		match: /Teams \+ shared workspaces/,
+		gate: { file: ['routes', 'api', 'workspaces', '+server.ts'], needle: 'ent.teams' }
+	},
 	// "Bring your own keys — generation at no charge" was an Agency line until
 	// customer BYOK was withdrawn from every generation provider (providers.ts).
 	// No plan sells it now, so there is no promise left to back. The entitlement
 	// check survives in the api-keys route as defence in depth for a provider
 	// that is ever re-opened; providers.spec.ts asserts the gated list is empty.
-	{ match: /API access/, gate: { file: ['routes', 'api', 'developer', 'keys', '+server.ts'], needle: 'ent.apiAccess' } },
-	{ match: /Starter generation credit/, gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'maybeWithholdWelcome' } },
-	{ match: /No cap on text posts/, universal: 'text costs only its writing; no plan restricts how many' },
+	{
+		match: /API access/,
+		gate: { file: ['routes', 'api', 'developer', 'keys', '+server.ts'], needle: 'ent.apiAccess' }
+	},
+	{
+		match: /Starter generation credit/,
+		gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'signup_credit_grant_atomic' }
+	},
+	{
+		match: /No cap on text posts/,
+		universal: 'text costs only its writing; no plan restricts how many'
+	},
 	{ match: /All 13 platforms/, universal: 'publishing is on every plan, including free' },
-	{ match: /Spend ledger \+ verified publishing/, universal: 'the ledger and publish receipts are shown to every plan — listing it only under Brand overstates it, a copy decision, not a gate' },
-	{ match: /Approval queue/, universal: 'review/approve is how every persona below fully-autonomous works — same overstatement' }
+	{
+		match: /Spend ledger \+ verified publishing/,
+		universal:
+			'the ledger and publish receipts are shown to every plan — listing it only under Brand overstates it, a copy decision, not a gate'
+	},
+	{
+		match: /Approval queue/,
+		universal:
+			'review/approve is how every persona below fully-autonomous works — same overstatement'
+	}
 ];
 
 describe('plan copy — every feature line has a line of code', () => {
@@ -42,7 +93,10 @@ describe('plan copy — every feature line has a line of code', () => {
 
 	it.each(allFeatures)('"%s" is accounted for', (feature) => {
 		const hits = PROMISES.filter((p) => p.match.test(feature));
-		expect(hits.length, `no entry in PROMISES matches "${feature}" — add the gate, or record why it needs none`).toBe(1);
+		expect(
+			hits.length,
+			`no entry in PROMISES matches "${feature}" — add the gate, or record why it needs none`
+		).toBe(1);
 	});
 
 	it.each(PROMISES.filter((p) => p.gate).map((p) => [String(p.match), p.gate!] as const))(
@@ -55,7 +109,21 @@ describe('plan copy — every feature line has a line of code', () => {
 
 describe('entitlements — absent means allowed', () => {
 	it('an empty object restricts nothing', () => {
-		const e = entitlementsFromRow({ plan: 'x', name: 'X', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: [], sort: 0, active: true, entitlements: {} }, 'x');
+		const e = entitlementsFromRow(
+			{
+				plan: 'x',
+				name: 'X',
+				price_usd_cents: 0,
+				included_credits: 0,
+				persona_limit: null,
+				brand_brief_limit: null,
+				features: [],
+				sort: 0,
+				active: true,
+				entitlements: {}
+			},
+			'x'
+		);
 		expect(e).toMatchObject(UNRESTRICTED);
 	});
 
@@ -64,7 +132,21 @@ describe('entitlements — absent means allowed', () => {
 	});
 
 	it('junk in the column is ignored rather than obeyed', () => {
-		const e = entitlementsFromRow({ plan: 'x', name: 'X', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: [], sort: 0, active: true, entitlements: { max_autonomy: 'wizard', teams: 'yes' } as Record<string, unknown> }, 'x');
+		const e = entitlementsFromRow(
+			{
+				plan: 'x',
+				name: 'X',
+				price_usd_cents: 0,
+				included_credits: 0,
+				persona_limit: null,
+				brand_brief_limit: null,
+				features: [],
+				sort: 0,
+				active: true,
+				entitlements: { max_autonomy: 'wizard', teams: 'yes' } as Record<string, unknown>
+			},
+			'x'
+		);
 		expect(e.maxAutonomy).toBe('fully_autonomous');
 		expect(e.teams).toBe(true);
 	});

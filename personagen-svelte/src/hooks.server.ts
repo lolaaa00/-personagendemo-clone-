@@ -19,7 +19,6 @@ import {
 } from '$lib/server/activity';
 import { activityLogEnabled } from '$lib/server/flags';
 import { startSettingsRefresh } from '$lib/server/settings';
-import { maybeWithholdWelcome } from '$lib/server/welcome-guard';
 import { loginWithReturn } from '$lib/return-to';
 
 // SIGTERM/SIGINT → flush registered in-memory queues, then exit. Installed
@@ -107,7 +106,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				const isAuthRoute = !!routeId && routeId.startsWith('/api/auth/');
 				const sess = isAuthRoute
 					? await event.locals.safeGetSession().catch(() => ({ session: null, user: null }))
-					: memoisedSession(event) ?? { session: null, user: null };
+					: (memoisedSession(event) ?? { session: null, user: null });
 				const userId = sess.user?.id ?? null;
 				const sessionHash = sessionHashOf((sess.session as any)?.access_token ?? null);
 				event.locals.activitySessionHash = sessionHash;
@@ -126,20 +125,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 					context: event.locals.activityContext ?? null,
 					meta: { ...meta, data: event.url.pathname.endsWith('/__data.json') || undefined }
 				});
-				if (userId) touchPresence(userId, routeId, event.locals.activityContext ?? null, sessionHash);
-				// Welcome-credit abuse guard: a second signup from the same address
-				// today keeps the account but not the free credit. Runs after the
-				// response is on its way; never affects the signup itself.
-				if (routeId === '/api/auth/signup' && method === 'POST' && status < 400) {
-					void response
-						.clone()
-						.json()
-						.then((b: any) => {
-							const newId = b?.user?.id;
-							if (newId) return maybeWithholdWelcome(String(newId), event.locals.activityContext?.ipHash ?? null, requestId);
-						})
-						.catch(() => {});
-				}
+				if (userId)
+					touchPresence(userId, routeId, event.locals.activityContext ?? null, sessionHash);
 			}
 		} catch (e) {
 			console.warn('[activity] capture failed (ignored):', (e as Error).message);
@@ -152,9 +139,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		response.headers.set('X-Content-Type-Options', 'nosniff');
 		response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 		response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-		response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
-		const https = event.url.protocol === 'https:' || event.request.headers.get('x-forwarded-proto') === 'https';
-		if (https) response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+		response.headers.set(
+			'Permissions-Policy',
+			'camera=(), microphone=(), geolocation=(), payment=(self)'
+		);
+		const https =
+			event.url.protocol === 'https:' || event.request.headers.get('x-forwarded-proto') === 'https';
+		if (https)
+			response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 	} catch {
 		/* immutable headers on some responses — fine */
 	}
@@ -173,9 +165,7 @@ const handleInner: Handle = async ({ event, resolve }) => {
 	// request's Supabase client with it, so RLS/roles apply exactly as for a
 	// browser session. Cookie-based auth (the normal path) runs below untouched.
 	const authHeader = event.request.headers.get('authorization') ?? '';
-	const bearer = authHeader.toLowerCase().startsWith('bearer ')
-		? authHeader.slice(7).trim()
-		: '';
+	const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
 
 	if (bearer && isApiKey(bearer)) {
 		const apiHandled = await (async () => {

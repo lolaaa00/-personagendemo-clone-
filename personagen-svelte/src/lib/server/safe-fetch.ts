@@ -101,3 +101,30 @@ export async function safeFetch(rawUrl: string, init?: RequestInit): Promise<Res
 		dispatcher.close().catch(() => {});
 	}
 }
+
+/**
+ * Fetch an untrusted URL while validating and pinning every redirect hop.
+ * Native redirect following is deliberately disabled: otherwise undici would
+ * resolve the Location target outside the pinned dispatcher.
+ */
+export async function safeFetchWithRedirects(
+	rawUrl: string,
+	init: RequestInit = {},
+	maxRedirects = 5,
+	fetchHop: typeof safeFetch = safeFetch
+): Promise<Response> {
+	if (!Number.isInteger(maxRedirects) || maxRedirects < 0) {
+		throw new Error('maxRedirects must be a non-negative integer');
+	}
+	let url = rawUrl;
+	for (let hop = 0; ; hop++) {
+		const response = await fetchHop(url, { ...init, redirect: 'manual' });
+		if (response.status < 300 || response.status >= 400) return response;
+		const location = response.headers.get('location');
+		if (!location) return response;
+		if (hop >= maxRedirects) throw new Error(`Too many redirects (maximum ${maxRedirects})`);
+		url = new URL(location, url).toString();
+		// fetchHop=safeFetch resolves, validates, and pins this new target before
+		// opening its socket. Tests inject a spy without weakening production.
+	}
+}

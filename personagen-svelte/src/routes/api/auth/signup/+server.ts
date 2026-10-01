@@ -50,6 +50,12 @@ function isDuplicateMessage(message: string): boolean {
 
 export const POST: RequestHandler = async ({ request, locals, getClientAddress }) => {
 	const { email, password, full_name, pin } = (await request.json()) as any;
+	let clientAddress: string | null = null;
+	try {
+		clientAddress = getClientAddress();
+	} catch {
+		// Missing trusted adapter address means welcome credit fails closed.
+	}
 
 	if (!email || !password) {
 		return json({ error: 'Email and password required' }, { status: 400 });
@@ -62,10 +68,8 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 		// without a ceiling it can be enumerated as fast as the network allows.
 		// Only the PIN path is limited — with no PIN configured there is no secret
 		// here to guess, and throttling open registration would be a bug.
-		let clientIp = 'unknown';
-		try {
-			clientIp = getClientAddress();
-		} catch {
+		let clientIp = clientAddress ?? 'unknown';
+		if (!clientAddress) {
 			// adapter-node throws when it cannot determine the address (no
 			// ADDRESS_HEADER behind a proxy). Everyone then shares one bucket,
 			// which is stricter, never looser.
@@ -152,7 +156,7 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 	// account created straight against GoTrue therefore gets nothing, which is
 	// the point. Never fatal: an account with no credit is recoverable, a failed
 	// registration is not.
-	if (created.user?.id) await grantWelcomeCredit(created.user.id);
+	if (created.user?.id) await grantWelcomeCredit(created.user.id, clientAddress);
 
 	// Establish the browser session through the cookie-backed client so the
 	// redirect to /dashboard lands on an authenticated layout.

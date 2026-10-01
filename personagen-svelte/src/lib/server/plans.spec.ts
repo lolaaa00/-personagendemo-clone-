@@ -1,12 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { PLAN_FALLBACK, includedResetClawback, mapStripeStatus, isPaidPlan, planFromCatalog, loadPlanCatalog, invalidatePlanCatalog } from './plans';
+import {
+	PLAN_FALLBACK,
+	mapStripeStatus,
+	isPaidPlan,
+	planFromCatalog,
+	loadPlanCatalog,
+	invalidatePlanCatalog
+} from './plans';
 
 describe('plans — catalog and margins', () => {
 	it('every paid plan includes a wallet worth ≤ 67% of its price and ≥ 77% margin floor at 3×', () => {
 		for (const p of PLAN_FALLBACK.filter((x) => x.price_usd_cents > 0)) {
 			expect(p.included_credits / p.price_usd_cents).toBeLessThanOrEqual(0.67);
 			const rawIfFullyUsed = p.included_credits / 100 / 3;
-			expect((p.price_usd_cents / 100 - rawIfFullyUsed) / (p.price_usd_cents / 100)).toBeGreaterThanOrEqual(0.77);
+			expect(
+				(p.price_usd_cents / 100 - rawIfFullyUsed) / (p.price_usd_cents / 100)
+			).toBeGreaterThanOrEqual(0.77);
 		}
 	});
 
@@ -19,30 +28,6 @@ describe('plans — catalog and margins', () => {
 	});
 });
 
-describe('plans — included credit reset', () => {
-	it('nothing spent: the whole previous grant comes back before the new one', () => {
-		expect(includedResetClawback(4000, 4000)).toBe(4000);
-	});
-	it('partly spent: only the unspent part comes back', () => {
-		expect(includedResetClawback(4000, 1500)).toBe(1500);
-	});
-	it('overspent into purchased credit: purchased credit is untouched (balance below the grant → take the balance only)', () => {
-		// balance 900 with a 4 000 grant means the user spent 3 100 of included credit
-		// AND the reset takes at most 900 — never more than the wallet holds.
-		expect(includedResetClawback(4000, 900)).toBe(900);
-	});
-	it('purchased credit on top of a full grant survives', () => {
-		// 4 000 included + 2 600 purchased = 6 600; reset takes 4 000, leaves the 2 600
-		expect(6600 - includedResetClawback(4000, 6600)).toBe(2600);
-	});
-	it('first period, empty wallet, garbage → 0', () => {
-		expect(includedResetClawback(0, 5000)).toBe(0);
-		expect(includedResetClawback(4000, 0)).toBe(0);
-		expect(includedResetClawback(NaN, NaN)).toBe(0);
-		expect(includedResetClawback(-5, 100)).toBe(0);
-	});
-});
-
 describe('plans — Stripe status mapping', () => {
 	it('maps to the four statuses the table accepts', () => {
 		expect(mapStripeStatus('active')).toBe('active');
@@ -51,7 +36,8 @@ describe('plans — Stripe status mapping', () => {
 		expect(mapStripeStatus('unpaid')).toBe('past_due');
 		expect(mapStripeStatus('canceled')).toBe('canceled');
 		expect(mapStripeStatus('incomplete_expired')).toBe('canceled');
-		expect(mapStripeStatus(undefined)).toBe('active');
+		expect(mapStripeStatus('paused')).toBe('past_due');
+		expect(mapStripeStatus(undefined)).toBe('past_due');
 	});
 });
 
@@ -76,7 +62,20 @@ describe('plans — the catalog cache', () => {
 
 	it('reads once and serves the rest from memory', async () => {
 		invalidatePlanCatalog();
-		const c = client([{ plan: 'free', name: 'Free', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: [], sort: 0, active: true, entitlements: {} }]);
+		const c = client([
+			{
+				plan: 'free',
+				name: 'Free',
+				price_usd_cents: 0,
+				included_credits: 0,
+				persona_limit: null,
+				brand_brief_limit: null,
+				features: [],
+				sort: 0,
+				active: true,
+				entitlements: {}
+			}
+		]);
 		await loadPlanCatalog(c as never);
 		await loadPlanCatalog(c as never);
 		await loadPlanCatalog(c as never);
@@ -111,7 +110,20 @@ describe('plans — the catalog cache', () => {
 
 	it('invalidatePlanCatalog forces the next read to hit the database', async () => {
 		invalidatePlanCatalog();
-		const c = client([{ plan: 'free', name: 'Free', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: [], sort: 0, active: true, entitlements: {} }]);
+		const c = client([
+			{
+				plan: 'free',
+				name: 'Free',
+				price_usd_cents: 0,
+				included_credits: 0,
+				persona_limit: null,
+				brand_brief_limit: null,
+				features: [],
+				sort: 0,
+				active: true,
+				entitlements: {}
+			}
+		]);
 		await loadPlanCatalog(c as never);
 		invalidatePlanCatalog();
 		await loadPlanCatalog(c as never);

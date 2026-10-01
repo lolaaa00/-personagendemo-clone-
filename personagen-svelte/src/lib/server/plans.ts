@@ -6,14 +6,8 @@
  * that has not been migrated yet. Included credit RESETS each period, the
  * industry norm and what keeps the plan price predictable:
  *
- *   on invoice.paid for period N+1
- *     remainder = min(last_included_grant, balance)   ← unspent part of period N's grant
- *     adjustment −remainder (never touches purchased or welcome credit,
- *                            which sit "under" the included grant)
- *     grant      +included_credits for period N+1
- *
- * Both writes carry a stripe_event_id derived from the invoice id, so a
- * replayed invoice.paid is inert (unique partial index on credit_ledger).
+ * The database tracks the remaining included bucket separately. Renewal and
+ * the subscription-period update happen in one idempotent transaction.
  */
 
 import { getServiceSupabase } from './service-supabase';
@@ -33,10 +27,106 @@ export interface PlanRow {
 }
 
 export const PLAN_FALLBACK: PlanRow[] = [
-	{ plan: 'free', name: 'Free', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: ['Starter generation credit — no card needed', 'No cap on text posts — each costs only its writing', 'All 13 platforms'], sort: 0, active: true , entitlements: {} },
-	{ plan: 'studio', name: 'Studio', price_usd_cents: 7_900, included_credits: 4_000, persona_limit: 3, brand_brief_limit: 1, features: ['3 personas', '$40 / month of media generation included', 'No cap on text posts — each costs only its writing', 'All 13 platforms', '1 brand brief', 'Advisor + Semi-autonomous', 'Standard video + lip-sync'], sort: 1, active: true , entitlements: { max_autonomy: 'semi_autonomous', cinematic: false, teams: false, api: false, byok: false, priority: false } },
-	{ plan: 'brand', name: 'Brand', price_usd_cents: 29_900, included_credits: 18_000, persona_limit: 10, brand_brief_limit: 3, features: ['10 personas', '$180 / month of media generation included', 'No cap on text posts — each costs only its writing', 'All 13 platforms', '3 brand briefs', 'All three autonomy levels', 'Cinematic multi-shot + talking head', 'Spend ledger + verified publishing', 'Approval queue'], sort: 2, active: true , entitlements: { max_autonomy: 'fully_autonomous', cinematic: true, teams: false, api: false, byok: false, priority: false } },
-	{ plan: 'agency', name: 'Agency', price_usd_cents: 89_900, included_credits: 60_000, persona_limit: null, brand_brief_limit: null, features: ['Unlimited personas', '$600 / month of media generation included', 'No cap on text posts — each costs only its writing', 'All 13 platforms', 'Unlimited brand briefs', 'Priority generation queue', 'Teams + shared workspaces', 'API access + dedicated manager'], sort: 3, active: true , entitlements: { max_autonomy: 'fully_autonomous', cinematic: true, teams: true, api: true, byok: false, priority: true } }
+	{
+		plan: 'free',
+		name: 'Free',
+		price_usd_cents: 0,
+		included_credits: 0,
+		persona_limit: null,
+		brand_brief_limit: null,
+		features: [
+			'Starter generation credit — no card needed',
+			'No cap on text posts — each costs only its writing',
+			'All 13 platforms'
+		],
+		sort: 0,
+		active: true,
+		entitlements: {}
+	},
+	{
+		plan: 'studio',
+		name: 'Studio',
+		price_usd_cents: 7_900,
+		included_credits: 4_000,
+		persona_limit: 3,
+		brand_brief_limit: 1,
+		features: [
+			'3 personas',
+			'$40 / month of media generation included',
+			'No cap on text posts — each costs only its writing',
+			'All 13 platforms',
+			'1 brand brief',
+			'Advisor + Semi-autonomous',
+			'Standard video + lip-sync'
+		],
+		sort: 1,
+		active: true,
+		entitlements: {
+			max_autonomy: 'semi_autonomous',
+			cinematic: false,
+			teams: false,
+			api: false,
+			byok: false,
+			priority: false
+		}
+	},
+	{
+		plan: 'brand',
+		name: 'Brand',
+		price_usd_cents: 29_900,
+		included_credits: 18_000,
+		persona_limit: 10,
+		brand_brief_limit: 3,
+		features: [
+			'10 personas',
+			'$180 / month of media generation included',
+			'No cap on text posts — each costs only its writing',
+			'All 13 platforms',
+			'3 brand briefs',
+			'All three autonomy levels',
+			'Cinematic multi-shot + talking head',
+			'Spend ledger + verified publishing',
+			'Approval queue'
+		],
+		sort: 2,
+		active: true,
+		entitlements: {
+			max_autonomy: 'fully_autonomous',
+			cinematic: true,
+			teams: false,
+			api: false,
+			byok: false,
+			priority: false
+		}
+	},
+	{
+		plan: 'agency',
+		name: 'Agency',
+		price_usd_cents: 89_900,
+		included_credits: 60_000,
+		persona_limit: null,
+		brand_brief_limit: null,
+		features: [
+			'Unlimited personas',
+			'$600 / month of media generation included',
+			'No cap on text posts — each costs only its writing',
+			'All 13 platforms',
+			'Unlimited brand briefs',
+			'Priority generation queue',
+			'Teams + shared workspaces',
+			'API access + dedicated manager'
+		],
+		sort: 3,
+		active: true,
+		entitlements: {
+			max_autonomy: 'fully_autonomous',
+			cinematic: true,
+			teams: true,
+			api: true,
+			byok: false,
+			priority: true
+		}
+	}
 ];
 
 export const PAID_PLANS = ['studio', 'brand', 'agency'] as const;
@@ -70,7 +160,12 @@ export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
 	if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.rows;
 	try {
 		const svc = client ?? getServiceSupabase();
-		const { data, error } = await svc.from('plan_catalog').select('plan, name, price_usd_cents, included_credits, persona_limit, brand_brief_limit, features, sort, active, entitlements').order('sort');
+		const { data, error } = await svc
+			.from('plan_catalog')
+			.select(
+				'plan, name, price_usd_cents, included_credits, persona_limit, brand_brief_limit, features, sort, active, entitlements'
+			)
+			.order('sort');
 		if (error || !data?.length) return PLAN_FALLBACK;
 		const rows: PlanRow[] = data.map((r: Record<string, unknown>) => ({
 			plan: r.plan,
@@ -82,7 +177,10 @@ export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
 			features: Array.isArray(r.features) ? r.features : [],
 			sort: Number(r.sort ?? 0),
 			active: r.active !== false,
-			entitlements: r.entitlements && typeof r.entitlements === 'object' && !Array.isArray(r.entitlements) ? (r.entitlements as Record<string, unknown>) : {}
+			entitlements:
+				r.entitlements && typeof r.entitlements === 'object' && !Array.isArray(r.entitlements)
+					? (r.entitlements as Record<string, unknown>)
+					: {}
 		}));
 		catalogCache = { rows, at: Date.now() };
 		return rows;
@@ -95,32 +193,25 @@ export function planFromCatalog(catalog: PlanRow[], plan: string): PlanRow | nul
 	return catalog.find((p) => p.plan === plan) ?? null;
 }
 
-/**
- * How much of the previous period's included grant to take back before the
- * new one lands. Never more than the balance (purchased credit is untouched
- * because it sits under the included grant), never negative.
- */
-export function includedResetClawback(lastIncludedGrant: number, balance: number): number {
-	const last = Math.max(0, Math.floor(Number(lastIncludedGrant) || 0));
-	const bal = Math.floor(Number(balance) || 0);
-	if (last <= 0 || bal <= 0) return 0;
-	return Math.min(last, bal);
-}
-
 /** Stripe subscription status → our subscriptions.status check values. */
-export function mapStripeStatus(s: string | null | undefined): 'active' | 'canceled' | 'past_due' | 'trialing' {
+export function mapStripeStatus(
+	s: string | null | undefined
+): 'active' | 'canceled' | 'past_due' | 'trialing' {
 	switch (String(s ?? '').toLowerCase()) {
+		case 'active':
+			return 'active';
 		case 'trialing':
 			return 'trialing';
 		case 'past_due':
 		case 'unpaid':
 		case 'incomplete':
+		case 'paused':
 			return 'past_due';
 		case 'canceled':
 		case 'incomplete_expired':
 			return 'canceled';
 		default:
-			return 'active';
+			return 'past_due';
 	}
 }
 
@@ -130,15 +221,23 @@ export function mapStripeStatus(s: string | null | undefined): 'active' | 'cance
  * but the catalog is service-only). A user with no row is on 'free'.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
-export async function personaLimitFor(userId: string, client?: any): Promise<{ plan: string; limit: number | null }> {
+export async function personaLimitFor(
+	userId: string,
+	client?: any
+): Promise<{ plan: string; limit: number | null }> {
 	const svc = client ?? getServiceSupabase();
 	const [{ data: sub }, catalog] = await Promise.all([
-		svc.from('subscriptions').select('plan, status, persona_limit').eq('user_id', userId).maybeSingle(),
+		svc
+			.from('subscriptions')
+			.select('plan, status, persona_limit')
+			.eq('user_id', userId)
+			.maybeSingle(),
 		loadPlanCatalog(svc)
 	]);
 	const active = sub && (sub.status === 'active' || sub.status === 'trialing');
 	const plan = active ? String(sub.plan ?? 'free') : 'free';
-	if (sub && sub.persona_limit !== null && sub.persona_limit !== undefined && active) return { plan, limit: Number(sub.persona_limit) };
+	if (sub && sub.persona_limit !== null && sub.persona_limit !== undefined && active)
+		return { plan, limit: Number(sub.persona_limit) };
 	const row = planFromCatalog(catalog, plan);
 	return { plan, limit: row?.persona_limit ?? null };
 }
@@ -149,7 +248,10 @@ export async function personaLimitExceeded(userId: string, client?: any): Promis
 	const svc = client ?? getServiceSupabase();
 	const { plan, limit } = await personaLimitFor(userId, svc);
 	if (limit === null) return null;
-	const { count } = await svc.from('agents').select('id', { count: 'exact', head: true }).eq('user_id', userId);
+	const { count } = await svc
+		.from('agents')
+		.select('id', { count: 'exact', head: true })
+		.eq('user_id', userId);
 	if ((count ?? 0) >= limit) {
 		return `Your ${plan} plan includes ${limit} persona${limit === 1 ? '' : 's'}. Upgrade on the Billing page to add more.`;
 	}

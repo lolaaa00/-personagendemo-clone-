@@ -222,5 +222,9 @@
 	[
 		"generation_events_reasoning_migration.sql",
 		"generation_events.tokens_reasoning + reasoning_share in llm_stage_usage: the model's hidden thinking told apart from its answer (the grader spent 950 of 1,054 output tokens deliberating over a rubric), so a reasoning budget can be measured per stage"
+	],
+	[
+		"atomic_credits_migration.sql",
+		"Separate expiring included credit, make renewals and signup grants atomic/idempotent, and require explicit classification of legacy positive wallets"
 	]
 ]

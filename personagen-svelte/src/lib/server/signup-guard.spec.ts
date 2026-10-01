@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const created = vi.hoisted(() => ({ args: null as Record<string, unknown> | null }));
-const mockEnv = vi.hoisted(() => ({} as Record<string, string>));
+const mockEnv = vi.hoisted(() => ({}) as Record<string, string>);
 
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$lib/server/supabase', () => ({
@@ -30,10 +30,10 @@ vi.mock('$lib/server/supabase', () => ({
 	})
 }));
 
-const granted = vi.hoisted(() => ({ ids: [] as string[] }));
+const granted = vi.hoisted(() => ({ calls: [] as Array<[string, string | null]> }));
 vi.mock('$lib/server/welcome-guard', () => ({
-	grantWelcomeCredit: async (id: string) => {
-		granted.ids.push(id);
+	grantWelcomeCredit: async (id: string, address: string | null) => {
+		granted.calls.push([id, address]);
 		return 'granted' as const;
 	}
 }));
@@ -57,7 +57,7 @@ const call = (body: unknown) =>
 
 beforeEach(() => {
 	created.args = null;
-	granted.ids = [];
+	granted.calls = [];
 	for (const k of Object.keys(mockEnv)) delete mockEnv[k];
 });
 
@@ -72,7 +72,10 @@ describe('signup — the invited marker', () => {
 		// user_metadata is client-writable through a plain GoTrue signup, so a
 		// marker there would be forgeable and the guard would be theatre.
 		expect(created.args).toBeNull();
-		const src = readFileSync(new URL('../../routes/api/auth/signup/+server.ts', import.meta.url), 'utf-8');
+		const src = readFileSync(
+			new URL('../../routes/api/auth/signup/+server.ts', import.meta.url),
+			'utf-8'
+		);
 		expect(src).toMatch(/app_metadata:\s*\{\s*invited:\s*true\s*\}/);
 		expect(src).not.toMatch(/user_metadata:[^}]*invited/);
 	});
@@ -94,13 +97,13 @@ describe('signup — the invited marker', () => {
 	it('grants the welcome credit for the account it just created', async () => {
 		// The trigger cannot: GoTrue applies app_metadata after the insert.
 		await call({ email: 'a@b.co', password: 'longenough' });
-		expect(granted.ids).toEqual(['u-new']);
+		expect(granted.calls).toEqual([['u-new', '203.0.113.7']]);
 	});
 
 	it('grants nothing when it refuses to create an account', async () => {
 		mockEnv.ADMIN_PIN = 'let-me-in';
 		await call({ email: 'a@b.co', password: 'longenough', pin: 'wrong' });
-		expect(granted.ids).toEqual([]);
+		expect(granted.calls).toEqual([]);
 	});
 });
 
@@ -123,19 +126,17 @@ describe('the trigger that reads the marker', () => {
 		expect(sql).toContain('INSERT INTO public.subscriptions');
 	});
 
-	it('keeps the hourly cap on the path it still owns', () => {
-		expect(sql).toContain('signup_credits_hourly_cap');
-	});
-
-	it('an absent or unreadable setting means the requirement is ON', () => {
-		expect(sql).toMatch(/COALESCE\(\(value #>> '\{\}'\) <> 'false', true\)/);
-		expect(sql).toContain('v_require := COALESCE(v_require, true)');
-	});
-
-	it('shares one idempotency key with the route, so a flip cannot double-grant', () => {
-		expect(sql).toContain("'welcome:' || NEW.id::text");
-		const guard = readFileSync(new URL('./welcome-guard.ts', import.meta.url), 'utf-8');
-		expect(guard).toContain('p_stripe_event: `welcome:${newUserId}`');
+	it('the final migration removes all money from the trigger path', () => {
+		const atomic = readFileSync(
+			new URL('../../../supabase/atomic_credits_migration.sql', import.meta.url),
+			'utf-8'
+		);
+		const finalTrigger = atomic.slice(
+			atomic.lastIndexOf('CREATE OR REPLACE FUNCTION public.handle_new_user')
+		);
+		expect(finalTrigger).toContain('INSERT INTO public.credit_accounts');
+		expect(finalTrigger).not.toContain('credit_apply');
+		expect(finalTrigger).not.toContain('signup_credits');
 	});
 });
 

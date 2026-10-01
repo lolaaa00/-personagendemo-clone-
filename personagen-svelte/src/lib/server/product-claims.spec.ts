@@ -90,9 +90,9 @@ const manualDeletePlatforms = (() => {
 /** The one landing sentence that promises a starting credit, sliced at its own
  *  full stop so a qualifier sitting in a different section — or in a footnote —
  *  cannot satisfy the assertion. Matches either wording the page might use. */
-const welcomeSentence = (
-	landing.match(/[^.<>\n]*(?:generation|welcome) credit[^.<>\n]*\./i) ?? ['']
-)[0].trim();
+const welcomeSentence = (landing.match(/[^.<>\n]*(?:generation|welcome) credit[^.<>\n]*\./i) ?? [
+	''
+])[0].trim();
 
 /** The wallet FAQ answer alone. It is the neighbouring copy most likely to grow
  *  the same unconditional promise, and the assertion below is what notices. */
@@ -123,10 +123,9 @@ describe('this spec is reading the files it claims to read', () => {
 				body.length,
 				`${name} read as empty — every assertion on it is vacuous`
 			).toBeGreaterThan(500);
-			expect(
-				body,
-				`${name} no longer contains ${fingerprint} — it moved or was renamed`
-			).toContain(fingerprint);
+			expect(body, `${name} no longer contains ${fingerprint} — it moved or was renamed`).toContain(
+				fingerprint
+			);
 		}
 	});
 
@@ -311,18 +310,16 @@ describe('the welcome credit is one per person, not an unconditional grant', () 
 		expect(welcomeGuard, why).toMatch(/return 'capped'/);
 		// The cap is a setting, not a constant — the copy names no number, and
 		// must not, because an operator can move this without touching the page.
-		expect(welcomeGuard, why).toMatch(/s\.signup_credits_hourly_cap/);
+		expect(welcomeGuard, why).toMatch(/settings\.signup_credits_hourly_cap/);
 		expect(landing, 'the landing copy now quotes a cap number it does not control').not.toMatch(
 			/\d+\s+(?:welcome|free|signup) credits? (?:an|per) hour/i
 		);
 	});
 
-	it('the per-address clawback still exists, with the note the user never sees', () => {
-		expect(welcomeGuard, why).toContain(
-			'welcome credit withheld: another account was created from this address today'
-		);
-		expect(welcomeGuard, why).toContain("eq('ip_hash', ipHash)");
-		expect(welcomeGuard, why).toMatch(/24 \* 60 \* 60 \* 1000/);
+	it('per-address eligibility is part of the same atomic database grant', () => {
+		expect(welcomeGuard, why).toContain('signup_credit_grant_atomic');
+		expect(welcomeGuard, why).toContain('p_address_hash');
+		expect(welcomeGuard, why).toContain("result === 'address_ineligible'");
 	});
 
 	it('both withholdings are still invisible to the user, which is why the copy carries the caveat', () => {

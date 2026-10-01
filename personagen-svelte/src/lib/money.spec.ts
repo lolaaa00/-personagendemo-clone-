@@ -45,7 +45,8 @@ describe('money — currency resolution', () => {
 describe('money — conversion and formatting', () => {
 	it('marks US dollars as US$ where the local currency also writes "$" (round-9)', () => {
 		expect(formatMoney(79, 'USD', 'es-MX')).toBe('US$79.00');
-		expect(formatMoney(10, 'USD', 'es-CL')).toBe('US$10.00');
+		// Keep the locale's decimal separator; only disambiguate the currency symbol.
+		expect(formatMoney(10, 'USD', 'es-CL')).toBe('US$10,00');
 		expect(formatMoney(61.34, 'MXN', 'es-MX', { whole: false })).toBe('$61.34');
 		expect(formatMoney(79, 'USD', 'en-US')).toBe('$79.00');
 		expect(formatMoney(79, 'USD', 'en-PH')).toBe('$79.00');

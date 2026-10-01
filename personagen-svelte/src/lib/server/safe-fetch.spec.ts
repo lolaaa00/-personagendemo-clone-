@@ -8,7 +8,7 @@
  * `ai-client-image.spec.ts` pin the image path to it.
  */
 import { describe, it, expect } from 'vitest';
-import { isPrivateOrReservedIp, resolvePublicIps } from './safe-fetch';
+import { isPrivateOrReservedIp, resolvePublicIps, safeFetchWithRedirects } from './safe-fetch';
 
 describe('isPrivateOrReservedIp', () => {
 	it.each([
@@ -49,6 +49,53 @@ describe('isPrivateOrReservedIp', () => {
 	it('fails CLOSED on garbage', () => {
 		expect(isPrivateOrReservedIp('not-an-ip')).toBe(true);
 		expect(isPrivateOrReservedIp('')).toBe(true);
+	});
+});
+
+describe('safeFetchWithRedirects', () => {
+	it('uses the pinned fetcher for the initial request and every redirect hop', async () => {
+		const seen: Array<{ url: string; redirect?: RequestRedirect }> = [];
+		const hop = async (url: string, init?: RequestInit) => {
+			seen.push({ url, redirect: init?.redirect });
+			if (seen.length === 1)
+				return new Response(null, { status: 302, headers: { location: '/next' } });
+			return new Response('ok', { status: 200 });
+		};
+		await expect(
+			safeFetchWithRedirects('https://public.example/start', {}, 5, hop)
+		).resolves.toHaveProperty('status', 200);
+		expect(seen).toEqual([
+			{ url: 'https://public.example/start', redirect: 'manual' },
+			{ url: 'https://public.example/next', redirect: 'manual' }
+		]);
+	});
+
+	it('blocks a redirect to a private target before a second socket is opened', async () => {
+		let sockets = 0;
+		const hop = async (url: string, init?: RequestInit) => {
+			await resolvePublicIps(url);
+			sockets++;
+			return new Response(null, {
+				status: 302,
+				headers: { location: 'http://169.254.169.254/latest/meta-data' }
+			});
+		};
+		await expect(safeFetchWithRedirects('https://8.8.8.8/start', {}, 5, hop)).rejects.toThrow(
+			/private\/internal/
+		);
+		expect(sockets).toBe(1);
+	});
+
+	it('stops after the configured redirect limit', async () => {
+		let calls = 0;
+		const hop = async () => {
+			calls++;
+			return new Response(null, { status: 302, headers: { location: `/hop-${calls}` } });
+		};
+		await expect(safeFetchWithRedirects('https://example.com/start', {}, 2, hop)).rejects.toThrow(
+			/Too many redirects/
+		);
+		expect(calls).toBe(3);
 	});
 });
 

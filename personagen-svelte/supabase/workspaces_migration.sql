@@ -111,17 +111,22 @@ GRANT EXECUTE ON FUNCTION public.is_workspace_member(UUID, UUID) TO authenticate
 -- dashboard banner) before they have a workspace_members row at all.
 CREATE OR REPLACE FUNCTION public.has_pending_invite(p_workspace_id UUID, p_email TEXT)
 RETURNS BOOLEAN
-LANGUAGE sql
+-- PL/pgSQL defers resolving workspace_invites until first execution. The
+-- generated clean-database bootstrap creates this helper before that table;
+-- LANGUAGE sql validates the body immediately and made a fresh bootstrap fail.
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 STABLE
 AS $$
-  SELECT EXISTS (
+BEGIN
+  RETURN EXISTS (
     SELECT 1 FROM public.workspace_invites wi
     WHERE wi.workspace_id = p_workspace_id
       AND wi.status = 'pending'
       AND lower(wi.email) = lower(p_email)
   );
+END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.has_pending_invite(UUID, TEXT) TO authenticated;

@@ -1,0 +1,1 @@
+{"id":"in_legacy_renewal","object":"invoice","status":"paid","billing_reason":"subscription_cycle","subscription":"sub_legacy","subscription_details":{"metadata":{"user_id":"00000000-0000-4000-8000-000000000001","plan":"studio"}},"lines":{"data":[{"type":"subscription","period":{"start":1761955200,"end":1764547200},"metadata":{}}]}}
