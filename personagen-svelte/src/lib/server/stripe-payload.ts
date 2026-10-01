@@ -25,13 +25,19 @@ export function invoiceSubscriptionId(invoice: StripeObject): string | null {
 export function invoiceSubscriptionMetadata(invoice: StripeObject): Record<string, unknown> {
 	const candidates = [
 		invoice?.parent?.subscription_details?.metadata,
-		invoice?.subscription_details?.metadata,
-		...(Array.isArray(invoice?.lines?.data)
-			? invoice.lines.data.map((line: StripeObject) => line?.metadata)
-			: [])
+		invoice?.subscription_details?.metadata
 	];
 	return (
 		candidates.find((value) => value && typeof value === 'object' && !Array.isArray(value)) ?? {}
+	);
+}
+
+/** Only a paid subscription creation/cycle starts a fresh included bucket. */
+export function isPaidRenewalInvoice(invoice: StripeObject): boolean {
+	return (
+		invoice?.status === 'paid' &&
+		(invoice?.billing_reason === 'subscription_create' ||
+			invoice?.billing_reason === 'subscription_cycle')
 	);
 }
 

@@ -17,22 +17,31 @@ import { Agent } from 'undici';
 
 export function isPrivateOrReservedIp(ip: string): boolean {
 	if (net.isIPv4(ip)) {
-		const [a, b] = ip.split('.').map(Number);
-		if (a === 127) return true; // loopback
-		if (a === 10) return true; // private
-		if (a === 172 && b >= 16 && b <= 31) return true; // private
-		if (a === 192 && b === 168) return true; // private
-		if (a === 169 && b === 254) return true; // link-local (incl. 169.254.169.254 metadata)
-		if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT (100.64.0.0/10)
-		if (a === 0) return true; // "this network" (incl. 0.0.0.0)
-		return false;
+		const [a, b, c] = ip.split('.').map(Number);
+		return (
+			a === 0 ||
+			a === 10 ||
+			a === 127 ||
+			(a === 100 && b >= 64 && b <= 127) ||
+			(a === 169 && b === 254) ||
+			(a === 172 && b >= 16 && b <= 31) ||
+			(a === 192 && b === 0 && (c === 0 || c === 2)) ||
+			(a === 192 && b === 88 && c === 99) ||
+			(a === 192 && b === 168) ||
+			(a === 198 && (b === 18 || b === 19)) ||
+			(a === 198 && b === 51 && c === 100) ||
+			(a === 203 && b === 0 && c === 113) ||
+			a >= 224
+		);
 	}
 	if (net.isIPv6(ip)) {
 		const lower = ip.toLowerCase();
 		if (lower === '::' || lower === '::0') return true; // unspecified — routes to loopback
 		if (lower === '::1') return true; // loopback
-		if (lower.startsWith('fe80:')) return true; // link-local
+		if (/^fe[89ab][0-9a-f]:/.test(lower)) return true; // link-local fe80::/10
 		if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local (fc00::/7)
+		if (lower.startsWith('ff')) return true; // multicast
+		if (lower.startsWith('2001:db8:')) return true; // documentation
 		if (lower.startsWith('::ffff:')) {
 			// IPv4-mapped IPv6 — recheck the embedded IPv4 address.
 			const mapped = lower.replace('::ffff:', '');
@@ -41,6 +50,20 @@ export function isPrivateOrReservedIp(ip: string): boolean {
 		return false;
 	}
 	return true; // unrecognized format — fail closed
+}
+
+/** Build undici's DNS callback from an immutable, already validated set. */
+export function createPinnedLookup(ips: readonly string[]) {
+	const pinned = [...ips];
+	return (
+		_hostname: string,
+		_opts: unknown,
+		cb: (error: Error | null, ip: string, family: number) => void
+	) => {
+		const ip = pinned.find((address) => !isPrivateOrReservedIp(address));
+		if (!ip) return cb(new Error('No public address for host'), '', 0);
+		cb(null, ip, net.isIPv6(ip) ? 6 : 4);
+	};
 }
 
 /** Resolves a URL's host to public IPs, throwing if it's disallowed or private. */
@@ -82,16 +105,7 @@ export async function safeFetch(rawUrl: string, init?: RequestInit): Promise<Res
 	const ips = await resolvePublicIps(rawUrl);
 	const dispatcher = new Agent({
 		connect: {
-			lookup: (_hostname, _opts, cb) => {
-				// Only ever hand the socket a pre-validated public address. Re-check
-				// here too, so even the pinned set can't smuggle a private IP.
-				const ip = ips.find((a) => !isPrivateOrReservedIp(a));
-				if (!ip) {
-					cb(new Error('No public address for host'), '', 0);
-					return;
-				}
-				cb(null, ip, net.isIPv6(ip) ? 6 : 4);
-			}
+			lookup: createPinnedLookup(ips)
 		}
 	});
 	try {
@@ -122,7 +136,11 @@ export async function safeFetchWithRedirects(
 		if (response.status < 300 || response.status >= 400) return response;
 		const location = response.headers.get('location');
 		if (!location) return response;
-		if (hop >= maxRedirects) throw new Error(`Too many redirects (maximum ${maxRedirects})`);
+		if (hop >= maxRedirects) {
+			await response.body?.cancel();
+			throw new Error(`Too many redirects (maximum ${maxRedirects})`);
+		}
+		await response.body?.cancel();
 		url = new URL(location, url).toString();
 		// fetchHop=safeFetch resolves, validates, and pins this new target before
 		// opening its socket. Tests inject a spy without weakening production.

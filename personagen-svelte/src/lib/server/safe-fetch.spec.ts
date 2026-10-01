@@ -8,7 +8,12 @@
  * `ai-client-image.spec.ts` pin the image path to it.
  */
 import { describe, it, expect } from 'vitest';
-import { isPrivateOrReservedIp, resolvePublicIps, safeFetchWithRedirects } from './safe-fetch';
+import {
+	createPinnedLookup,
+	isPrivateOrReservedIp,
+	resolvePublicIps,
+	safeFetchWithRedirects
+} from './safe-fetch';
 
 describe('isPrivateOrReservedIp', () => {
 	it.each([
@@ -49,6 +54,34 @@ describe('isPrivateOrReservedIp', () => {
 	it('fails CLOSED on garbage', () => {
 		expect(isPrivateOrReservedIp('not-an-ip')).toBe(true);
 		expect(isPrivateOrReservedIp('')).toBe(true);
+	});
+
+	it.each([
+		'192.0.2.1',
+		'198.18.0.1',
+		'198.51.100.2',
+		'203.0.113.7',
+		'224.0.0.1',
+		'255.255.255.255',
+		'fe90::1',
+		'ff02::1',
+		'2001:db8::1'
+	])('blocks reserved range address %s', (ip) => {
+		expect(isPrivateOrReservedIp(ip)).toBe(true);
+	});
+});
+
+describe('createPinnedLookup', () => {
+	it('keeps the validated address when a later DNS answer rebinds privately', async () => {
+		const lookup = createPinnedLookup(['8.8.8.8']);
+		const laterDnsAnswer = '169.254.169.254';
+		const selected = await new Promise<string>((resolve, reject) =>
+			lookup('rebind.example', {}, (error, address) =>
+				error ? reject(error) : resolve(address)
+			)
+		);
+		expect(laterDnsAnswer).not.toBe(selected);
+		expect(selected).toBe('8.8.8.8');
 	});
 });
 

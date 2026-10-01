@@ -5220,7 +5220,7 @@ REVOKE ALL ON public.llm_stage_usage FROM PUBLIC, anon, authenticated;
 ALTER TABLE public.credit_accounts ADD COLUMN IF NOT EXISTS included_balance_credits BIGINT;
 ALTER TABLE public.credit_accounts ALTER COLUMN included_balance_credits SET DEFAULT 0;
 UPDATE public.credit_accounts SET included_balance_credits=0
- WHERE included_balance_credits IS NULL AND balance_credits=0;
+ WHERE included_balance_credits IS NULL AND balance_credits<=0;
 ALTER TABLE public.credit_accounts DROP CONSTRAINT IF EXISTS credit_accounts_included_balance_check;
 ALTER TABLE public.credit_accounts ADD CONSTRAINT credit_accounts_included_balance_check
  CHECK (included_balance_credits IS NULL OR
@@ -5244,18 +5244,48 @@ CREATE INDEX IF NOT EXISTS idx_signup_credit_claims_time ON public.signup_credit
 ALTER TABLE public.signup_credit_claims ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.signup_credit_claims FROM PUBLIC, anon, authenticated;
 
-CREATE OR REPLACE FUNCTION public.credit_classify_included(p_user UUID,p_remaining BIGINT)
+CREATE TABLE IF NOT EXISTS public.credit_bucket_classifications (
+ id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+ balance_at_classification BIGINT NOT NULL,
+ included_credits BIGINT NOT NULL CHECK(included_credits>=0),
+ purchased_credits BIGINT NOT NULL CHECK(purchased_credits>=0),
+ reason TEXT NOT NULL CHECK(length(trim(reason))>=12),
+ classified_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+ classified_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_bucket_classifications_user
+ ON public.credit_bucket_classifications(user_id) WHERE user_id IS NOT NULL;
+ALTER TABLE public.credit_bucket_classifications ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.credit_bucket_classifications FROM PUBLIC, anon, authenticated;
+
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS last_credit_period_start TIMESTAMPTZ;
+-- Existing subscriptions may already have received their current-period grant
+-- through the legacy handler. Seed the credit-specific cursor so replaying an
+-- old invoice after deployment cannot grant that period a second time.
+UPDATE public.subscriptions
+ SET last_credit_period_start=current_period_start
+ WHERE last_credit_period_start IS NULL AND current_period_start IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.credit_classify_included(
+ p_user UUID,p_remaining BIGINT,p_reason TEXT,p_actor UUID DEFAULT NULL
+)
 RETURNS BIGINT LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE v_balance BIGINT;
+DECLARE v_balance BIGINT;v_existing BIGINT;
 BEGIN
  IF p_remaining<0 THEN RAISE EXCEPTION 'remaining included credit cannot be negative'; END IF;
- SELECT balance_credits INTO v_balance FROM public.credit_accounts WHERE user_id=p_user FOR UPDATE;
+ IF length(trim(COALESCE(p_reason,'')))<12 THEN RAISE EXCEPTION 'classification reason is required'; END IF;
+ SELECT balance_credits,included_balance_credits INTO v_balance,v_existing FROM public.credit_accounts WHERE user_id=p_user FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'wallet not found'; END IF;
+ IF v_existing IS NOT NULL THEN RAISE EXCEPTION 'wallet is already classified'; END IF;
  IF p_remaining>GREATEST(v_balance,0) THEN RAISE EXCEPTION 'included credit % exceeds wallet balance %',p_remaining,v_balance; END IF;
  UPDATE public.credit_accounts SET included_balance_credits=p_remaining WHERE user_id=p_user;
+ INSERT INTO public.credit_bucket_classifications(user_id,balance_at_classification,included_credits,purchased_credits,reason,classified_by)
+ VALUES(p_user,v_balance,p_remaining,GREATEST(v_balance-p_remaining,0),trim(p_reason),p_actor);
  RETURN p_remaining;
 END $$;
-REVOKE ALL ON FUNCTION public.credit_classify_included(UUID,BIGINT) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.credit_classify_included(UUID,BIGINT,TEXT,UUID) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.credit_classify_included(UUID,BIGINT,TEXT,UUID) TO service_role;
 
 -- The sole general mutator now consumes expiring included credit first.
 CREATE OR REPLACE FUNCTION public.credit_apply(
@@ -5281,24 +5311,30 @@ BEGIN
   v_included:=LEAST(v_included,GREATEST(v_bal+p_delta,0));
  END IF;
  v_bal:=v_bal+p_delta;
+ -- Once an unclassified legacy wallet reaches zero there is no remaining
+ -- allocation to infer, so it is safe to classify the empty included bucket.
+ IF v_included IS NULL AND v_bal<=0 THEN v_included:=0; END IF;
  UPDATE public.credit_accounts SET balance_credits=v_bal,included_balance_credits=v_included WHERE user_id=p_user;
  INSERT INTO public.credit_ledger(user_id,delta,kind,balance_after,waived_credits,generation_event_id,post_id,agent_id,stripe_event_id,actor_user_id,note)
  VALUES(p_user,p_delta,p_kind,v_bal,COALESCE(p_waived,0),p_event,p_post,p_agent,p_stripe_event,p_actor,p_note);
  RETURN v_bal;
 END $$;
 REVOKE ALL ON FUNCTION public.credit_apply(UUID,BIGINT,TEXT,TEXT,UUID,UUID,UUID,UUID,TEXT,BIGINT,BOOLEAN) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.credit_apply(UUID,BIGINT,TEXT,TEXT,UUID,UUID,UUID,UUID,TEXT,BIGINT,BOOLEAN) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.subscription_renewal_atomic(
  p_subscription TEXT,p_invoice TEXT,p_period_start TIMESTAMPTZ,p_period_end TIMESTAMPTZ,p_included BIGINT
 ) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_sub public.subscriptions%ROWTYPE;v_balance BIGINT;v_remaining BIGINT;v_new BIGINT;
 BEGIN
- IF p_subscription IS NULL OR p_invoice IS NULL OR p_period_start IS NULL OR p_included<0 THEN RAISE EXCEPTION 'subscription_renewal_atomic: invalid arguments' USING ERRCODE='22023'; END IF;
+ IF p_subscription IS NULL OR p_invoice IS NULL OR p_period_start IS NULL OR p_included<0 OR (p_period_end IS NOT NULL AND p_period_end<=p_period_start) THEN RAISE EXCEPTION 'subscription_renewal_atomic: invalid arguments' USING ERRCODE='22023'; END IF;
  SELECT * INTO v_sub FROM public.subscriptions WHERE stripe_subscription_id=p_subscription FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'unknown subscription %',p_subscription USING ERRCODE='P0002'; END IF;
  INSERT INTO public.billing_webhook_events(event_key,user_id,result) VALUES('invoice:'||p_invoice,v_sub.user_id,'applied') ON CONFLICT DO NOTHING;
  IF NOT FOUND THEN RETURN jsonb_build_object('result','duplicate','user_id',v_sub.user_id); END IF;
- IF v_sub.current_period_start IS NOT NULL AND p_period_start<=v_sub.current_period_start THEN
+ -- Status webhooks can update current_period_start before invoice.paid arrives.
+ -- Only the period that actually received credit is a valid stale-event cursor.
+ IF v_sub.last_credit_period_start IS NOT NULL AND p_period_start<=v_sub.last_credit_period_start THEN
   UPDATE public.billing_webhook_events SET result='stale' WHERE event_key='invoice:'||p_invoice;
   RETURN jsonb_build_object('result','stale','user_id',v_sub.user_id);
  END IF;
@@ -5311,10 +5347,11 @@ BEGIN
   VALUES(v_sub.user_id,-v_remaining,'adjustment',v_balance-v_remaining,'inv:'||p_invoice||':expire',v_sub.plan||' plan: expire remaining included credit');
  INSERT INTO public.credit_ledger(user_id,delta,kind,balance_after,stripe_event_id,note)
   VALUES(v_sub.user_id,p_included,'grant',v_new,'inv:'||p_invoice||':grant',v_sub.plan||' plan: included credit renewal');
- UPDATE public.subscriptions SET status='active',last_included_grant_credits=p_included,included_credits=p_included,current_period_start=p_period_start,current_period_end=p_period_end,updated_at=now() WHERE user_id=v_sub.user_id;
+ UPDATE public.subscriptions SET status='active',last_included_grant_credits=p_included,included_credits=p_included,last_credit_period_start=p_period_start,current_period_start=p_period_start,current_period_end=p_period_end,updated_at=now() WHERE user_id=v_sub.user_id;
  RETURN jsonb_build_object('result','applied','user_id',v_sub.user_id,'expired',v_remaining,'granted',p_included,'balance',v_new);
 END $$;
 REVOKE ALL ON FUNCTION public.subscription_renewal_atomic(TEXT,TEXT,TIMESTAMPTZ,TIMESTAMPTZ,BIGINT) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.subscription_renewal_atomic(TEXT,TEXT,TIMESTAMPTZ,TIMESTAMPTZ,BIGINT) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.signup_credit_grant_atomic(p_user UUID,p_credits BIGINT,p_hourly_cap BIGINT,p_address_hash TEXT)
 RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
@@ -5334,6 +5371,7 @@ BEGIN
  RETURN 'granted';
 END $$;
 REVOKE ALL ON FUNCTION public.signup_credit_grant_atomic(UUID,BIGINT,BIGINT,TEXT) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.signup_credit_grant_atomic(UUID,BIGINT,BIGINT,TEXT) TO service_role;
 
 -- Account creation remains structural. No trigger can obtain a trusted client
 -- address, so every monetary welcome grant must pass through the server route

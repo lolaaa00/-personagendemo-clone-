@@ -15,8 +15,10 @@ const signup = sql.slice(
 
 describe('atomic credit migration contract', () => {
 	it('does not guess allocation for existing positive wallets', () => {
-		expect(sql).toMatch(/included_balance_credits IS NULL AND balance_credits=0/);
+		expect(sql).toMatch(/included_balance_credits IS NULL AND balance_credits<=0/);
 		expect(sql).toContain('credit_classify_included');
+		expect(sql).toContain('credit_bucket_classifications');
+		expect(sql).toContain('wallet is already classified');
 		expect(renewal).toContain('INCLUDED_CREDIT_CLASSIFICATION_REQUIRED');
 	});
 
@@ -43,10 +45,28 @@ describe('atomic credit migration contract', () => {
 	});
 
 	it('rejects out-of-order periods without touching the wallet', () => {
-		const stale = renewal.indexOf('p_period_start<=v_sub.current_period_start');
+		const stale = renewal.indexOf('p_period_start<=v_sub.last_credit_period_start');
 		const wallet = renewal.indexOf('UPDATE public.credit_accounts');
 		expect(stale).toBeGreaterThan(0);
 		expect(wallet).toBeGreaterThan(stale);
+	});
+
+	it('does not let an earlier subscription status event suppress a paid invoice grant', () => {
+		expect(sql).toContain('last_credit_period_start');
+		expect(renewal).not.toContain('p_period_start<=v_sub.current_period_start');
+		expect(renewal).toContain('last_credit_period_start=p_period_start');
+	});
+
+	it('explicitly grants only the service role access to privileged money RPCs', () => {
+		for (const fn of [
+			'credit_apply',
+			'credit_classify_included',
+			'subscription_renewal_atomic',
+			'signup_credit_grant_atomic'
+		]) {
+			expect(sql).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${fn}\\(`));
+		}
+		expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.subscription_renewal_atomic[\s\S]*FROM PUBLIC,anon,authenticated/);
 	});
 
 	it('serializes concurrent signup cap checks and is independent of activity rows', () => {

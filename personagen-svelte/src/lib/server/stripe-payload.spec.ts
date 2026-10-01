@@ -3,6 +3,7 @@ import legacy from './fixtures/stripe-invoice-paid-legacy.json';
 import basil from './fixtures/stripe-invoice-paid-basil.json';
 import {
 	invoiceServicePeriod,
+	isPaidRenewalInvoice,
 	invoiceSubscriptionId,
 	invoiceSubscriptionMetadata,
 	subscriptionServicePeriod
@@ -24,6 +25,18 @@ describe('Stripe webhook payload compatibility', () => {
 			start: '2025-12-01T00:00:00.000Z',
 			end: '2026-01-01T00:00:00.000Z'
 		});
+	});
+	it('only treats paid subscription creation/cycle invoices as grant events', () => {
+		expect(isPaidRenewalInvoice(legacy)).toBe(true);
+		expect(isPaidRenewalInvoice(basil)).toBe(true);
+		expect(isPaidRenewalInvoice({ ...basil, status: 'open' })).toBe(false);
+		expect(isPaidRenewalInvoice({ ...basil, billing_reason: 'subscription_update' })).toBe(false);
+		expect(isPaidRenewalInvoice({ ...basil, billing_reason: 'manual' })).toBe(false);
+	});
+	it('never trusts arbitrary invoice-line metadata for account recovery', () => {
+		expect(
+			invoiceSubscriptionMetadata({ lines: { data: [{ metadata: { user_id: 'attacker' } }] } })
+		).toEqual({});
 	});
 	it('supports legacy top-level and Basil item subscription periods', () => {
 		expect(subscriptionServicePeriod({ current_period_start: 1, current_period_end: 2 })).toEqual({

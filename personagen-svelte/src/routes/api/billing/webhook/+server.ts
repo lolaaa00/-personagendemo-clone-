@@ -15,6 +15,7 @@ import {
 	invoiceServicePeriod,
 	invoiceSubscriptionId,
 	invoiceSubscriptionMetadata,
+	isPaidRenewalInvoice,
 	subscriptionServicePeriod
 } from '$lib/server/stripe-payload';
 
@@ -155,6 +156,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	// ── each paid invoice: reset last period's included credit, grant this period's ──
 	if (type === 'invoice.paid') {
+		if (!isPaidRenewalInvoice(obj)) return text('ignored: not a paid subscription renewal');
 		const subId = invoiceSubscriptionId(obj);
 		if (!subId) return text('ignored: invoice without subscription');
 		let { data: sub } = await svc
